@@ -135,6 +135,7 @@ services:
       ASPNETCORE_ENVIRONMENT: Development
       ConnectionStrings__AppDb: Host=postgres;Port=5432;Database=app_db;Username=app_service;Password=${APP_DB_PASSWORD}
       Migrations__Path: /migrations/app_db
+      MlService__BaseUrl: http://ml-service:8000
       Observability__OtlpEndpoint: http://otel-collector:4317
     volumes:
       - ./postgres-db/migrations:/migrations:ro
@@ -148,12 +149,31 @@ services:
     restart: unless-stopped
     networks: [app-network]
 
+  ml-service:
+    build:
+      context: .
+      dockerfile: ml-service/Dockerfile
+    environment:
+      ML_HORIZON_HOURS: "24"
+    volumes:
+      - ml_models:/app/models
+      - ./ml-data:/app/data:ro
+    read_only: true
+    tmpfs: ["/tmp:size=100M"]
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    depends_on:
+      postgres: { condition: service_healthy }
+    restart: unless-stopped
+    networks: [app-network]
+
 volumes:
   postgres_data:
   loki_data:
   prometheus_data:
   tempo_data:
   grafana_data:
+  ml_models:
 
 networks:
   app-network:

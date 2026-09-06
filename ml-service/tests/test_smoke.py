@@ -1,0 +1,73 @@
+"""ml-service smoke tests (run: pytest -q)."""
+
+from __future__ import annotations
+
+from fastapi.testclient import TestClient
+
+from app.main import app, Category
+from app.models.baseline import BaselineTrainer
+from app.models.features import features_for, schema_default_vector
+
+
+def _ensure_models():
+    """Train all categories once (cached in registry) so endpoints are usable."""
+    from app.models.registry import get_registry
+
+    trainer = BaselineTrainer()
+    registry = get_registry()
+    for cat in Category:
+        if registry.status(cat.value).state != "trained":
+            trainer.fit(cat.value)
+
+
+def _client():
+    """TestClient as a context manager so the app lifespan (engine setup) runs."""
+    return TestClient(app)
+
+
+def test_status_returns_ready():
+    _ensure_models()
+    with _client() as client:
+        resp = client.get("/status")
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["state"] == "ready"
+        assert set(body["models"]) == {c.value for c in Category}
+
+
+def test_predict_all_categories():
+    _ensure_models()
+    with _client() as client:
+        for cat in Category:
+            features = schema_default_vector(cat.value)
+            resp = client.post(
+                "/predict",
+                json={
+                    "category": cat.value,
+                    "subject_id": "test-subject",
+                    "current_features": features,
+                    "horizon_hours": 24,
+                },
+            )
+            assert resp.status_code == 200, f"{cat.value}: {resp.text}"
+            body = resp.json()
+            assert 0.0 <= body["risk_score"] <= 1.0
+            assert body["horizon_hours"] == 24
+            assert body["model_version"] != "none"
+
+
+def test_predict_unknown_category_rejected():
+    _ensure_models()
+    with _client() as client:
+        resp = client.post(
+            "/predict",
+            json={"category": "bogus", "subject_id": "x", "current_features": {}},
+        )
+        assert resp.status_code == 422
+
+
+def test_features_schema_consistency():
+    for cat in Category:
+        names = features_for(cat.value)
+        assert len(names) == 6
+        assert len(set(names)) == 6

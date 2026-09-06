@@ -13,6 +13,11 @@ on:
         required: true
         type: boolean
         default: false
+      publish_ml_service:
+        description: Publish ml-service image
+        required: true
+        type: boolean
+        default: false
       publish_default_branch_tag:
         description: Also publish the default branch tag
         required: true
@@ -38,7 +43,7 @@ jobs:
       - name: Validate selection
         shell: bash
         run: |
-          if [[ "${{ inputs.publish_api_proxy }}" != "true" && "${{ inputs.publish_app_service }}" != "true" ]]; then
+          if [[ "${{ inputs.publish_api_proxy }}" != "true" && "${{ inputs.publish_app_service }}" != "true" && "${{ inputs.publish_ml_service }}" != "true" ]]; then
             echo "Select at least one service." >&2
             exit 1
           fi
@@ -79,6 +84,10 @@ jobs:
             enabled: ${{ inputs.publish_app_service }}
             dockerfile: app-service/Dockerfile
             image_name: service-template-app-service
+          - service: ml-service
+            enabled: ${{ inputs.publish_ml_service }}
+            dockerfile: ml-service/Dockerfile
+            image_name: service-template-ml-service
     steps:
       - uses: actions/checkout@v4
         if: matrix.enabled == true
