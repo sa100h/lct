@@ -47,7 +47,7 @@ services:
       - ./observability/otel-collector/config.yaml:/etc/otelcol-contrib/config.yaml:ro
     depends_on:
       loki: { condition: service_started }
-      tempo: { condition: service_started }
+      # tempo: { condition: service_started }
     restart: unless-stopped
     networks: app-network
 
