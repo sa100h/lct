@@ -19,25 +19,25 @@ services:
       start_period: 10s
     security_opt: ["no-new-privileges:true"]
     restart: unless-stopped
-    networks: [app-network]
+    networks: app-network
 
-  loki:
-    image: grafana/loki:3.4.2
-    command: ["-config.file=/etc/loki/config.yaml"]
-    volumes:
-      - ./observability/loki/config.yaml:/etc/loki/config.yaml:ro
-      - loki_data:/loki
-    restart: unless-stopped
-    networks: [app-network]
+  # loki:
+  #   image: grafana/loki:3.4.2
+  #   command: ["-config.file=/etc/loki/config.yaml"]
+  #   volumes:
+  #     - ./observability/loki/config.yaml:/etc/loki/config.yaml:ro
+  #     - loki_data:/loki
+  #   restart: unless-stopped
+  #   networks: [app-network]
 
-  tempo:
-    image: grafana/tempo:2.8.2
-    command: ["-config.file=/etc/tempo/config.yaml"]
-    volumes:
-      - ./observability/tempo/config.yaml:/etc/tempo/config.yaml:ro
-      - tempo_data:/var/tempo
-    restart: unless-stopped
-    networks: [app-network]
+  # tempo:
+  #   image: grafana/tempo:2.8.2
+  #   command: ["-config.file=/etc/tempo/config.yaml"]
+  #   volumes:
+  #     - ./observability/tempo/config.yaml:/etc/tempo/config.yaml:ro
+  #     - tempo_data:/var/tempo
+  #   restart: unless-stopped
+  #   networks: [app-network]
 
   otel-collector:
     image: otel/opentelemetry-collector-contrib:0.128.0
@@ -49,60 +49,60 @@ services:
       loki: { condition: service_started }
       tempo: { condition: service_started }
     restart: unless-stopped
-    networks: [app-network]
+    networks: app-network
 
-  prometheus:
-    image: prom/prometheus:v2.54.1
-    command:
-      - --config.file=/etc/prometheus/prometheus.yml
-      - --storage.tsdb.path=/prometheus
-      - --storage.tsdb.retention.time=15d
-    ports: ["${PROMETHEUS_PORT:-9090}:9090"]
-    volumes:
-      - ./observability/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
-      - prometheus_data:/prometheus
-    depends_on:
-      api-proxy: { condition: service_started }
-      app-service: { condition: service_started }
-      node-exporter: { condition: service_started }
-    restart: unless-stopped
-    networks: [app-network]
+  # prometheus:
+  #   image: prom/prometheus:v2.54.1
+  #   command:
+  #     - --config.file=/etc/prometheus/prometheus.yml
+  #     - --storage.tsdb.path=/prometheus
+  #     - --storage.tsdb.retention.time=15d
+  #   ports: ["${PROMETHEUS_PORT:-9090}:9090"]
+  #   volumes:
+  #     - ./observability/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+  #     - prometheus_data:/prometheus
+  #   depends_on:
+  #     api-proxy: { condition: service_started }
+  #     app-service: { condition: service_started }
+  #     node-exporter: { condition: service_started }
+  #   restart: unless-stopped
+  #   networks: [app-network]
 
-  grafana:
-    image: grafana/grafana:11.6.0
-    ports: ["${GRAFANA_PORT:-3000}:3000"]
-    environment:
-      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
-      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-admin}
-      GF_AUTH_ANONYMOUS_ENABLED: "false"
-    volumes:
-      - ./observability/grafana/dashboards:/var/lib/grafana/dashboards:ro
-      - ./observability/grafana/provisioning:/etc/grafana/provisioning:ro
-      - grafana_data:/var/lib/grafana
-    depends_on:
-      loki: { condition: service_started }
-      prometheus: { condition: service_started }
-      tempo: { condition: service_started }
-    restart: unless-stopped
-    networks: [app-network]
+  # grafana:
+  #   image: grafana/grafana:11.6.0
+  #   ports: ["${GRAFANA_PORT:-3000}:3000"]
+  #   environment:
+  #     GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
+  #     GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-admin}
+  #     GF_AUTH_ANONYMOUS_ENABLED: "false"
+  #   volumes:
+  #     - ./observability/grafana/dashboards:/var/lib/grafana/dashboards:ro
+  #     - ./observability/grafana/provisioning:/etc/grafana/provisioning:ro
+  #     - grafana_data:/var/lib/grafana
+  #   depends_on:
+  #     loki: { condition: service_started }
+  #     prometheus: { condition: service_started }
+  #     tempo: { condition: service_started }
+  #   restart: unless-stopped
+  #   networks: [app-network]
 
-  promtail:
-    image: grafana/promtail:3.4.2
-    command: ["-config.file=/etc/promtail/config.yaml", "-config.expand-env=true"]
-    environment:
-      DEPLOYMENT_ENVIRONMENT: ${ASPNETCORE_ENVIRONMENT:-Development}
-    volumes:
-      - ./observability/promtail/config.yaml:/etc/promtail/config.yaml:ro
-      - /var/run/docker.sock:/var/run/docker.sock
-    depends_on:
-      loki: { condition: service_started }
-    restart: unless-stopped
-    networks: [app-network]
+  # promtail:
+  #   image: grafana/promtail:3.4.2
+  #   command: ["-config.file=/etc/promtail/config.yaml", "-config.expand-env=true"]
+  #   environment:
+  #     DEPLOYMENT_ENVIRONMENT: ${ASPNETCORE_ENVIRONMENT:-Development}
+  #   volumes:
+  #     - ./observability/promtail/config.yaml:/etc/promtail/config.yaml:ro
+  #     - /var/run/docker.sock:/var/run/docker.sock
+  #   depends_on:
+  #     loki: { condition: service_started }
+  #   restart: unless-stopped
+  #   networks: [app-network]
 
-  node-exporter:
-    image: prom/node-exporter:v1.8.2
-    restart: unless-stopped
-    networks: [app-network]
+  # node-exporter:
+  #   image: prom/node-exporter:v1.8.2
+  #   restart: unless-stopped
+  #   networks: [app-network]
 
   api-proxy:
     build:
@@ -125,7 +125,7 @@ services:
       app-service: { condition: service_started }
       otel-collector: { condition: service_started }
     restart: unless-stopped
-    networks: [app-network]
+    networks: app-network
 
   app-service:
     build:
@@ -147,7 +147,7 @@ services:
       postgres: { condition: service_healthy }
       otel-collector: { condition: service_started }
     restart: unless-stopped
-    networks: [app-network]
+    networks: app-network
 
   ml-service:
     build:
@@ -165,14 +165,14 @@ services:
     depends_on:
       postgres: { condition: service_healthy }
     restart: unless-stopped
-    networks: [app-network]
+    networks: app-network
 
 volumes:
   postgres_data:
-  loki_data:
-  prometheus_data:
-  tempo_data:
-  grafana_data:
+  # loki_data:
+  # prometheus_data:
+  # tempo_data:
+  # grafana_data:
   ml_models:
 
 networks:
