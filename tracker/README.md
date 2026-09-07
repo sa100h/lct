@@ -3,6 +3,9 @@
 Планирование в духе [GitScrum](https://docs.gitscrum.com/en) без отдельной
 системы: всё живёт в репозитории, статус виден прямо в README.
 
+> **Подробная инструкция: [`INSTRUCTIONS.md`](./INSTRUCTIONS.md)** — где
+> backlog, как создавать и двигать задачи, спринт-планирование, правила.
+
 ## Модели GitScrum, которые мы используем
 - **Kanban** — колонки `Backlog → To Do → In Progress → Review → Done`.
 - **Спринт** — таймбокс с ёмкостью в story points (`tracker/config.toml`).
