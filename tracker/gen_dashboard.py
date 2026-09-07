@@ -110,18 +110,21 @@ def render_board(tasks, cfg):
     )
     out.append(chips)
     out.append("")
-    # Канбан-таблица
+    # Канбан-таблица: ОДНА строка = одна колонка, карточки внутри
+    # ячейки складываются друг под другом через <br><br>.
     out.append("| " + " | ".join(COLUMN_LABEL[c] for c in COLUMNS) + " |")
     out.append("|" + "---|" * len(COLUMNS))
     by_col = {c: [] for c in COLUMNS}
     for t in tasks:
         by_col.setdefault(t["column"], []).append(t)
+    row_cells = []
     for c in COLUMNS:
         rows = sorted(by_col[c], key=lambda x: x["id"])
-        cells = [f"{STATUS_ICON[x['column']]} `{x['id']}` {x['title']}  \n"
+        cards = [f"{STATUS_ICON[x['column']]} **`{x['id']}`** {x['title']}<br>"
                  f"_{x['points']} pt · {x['assignee']} · {x['due']}_"
                  for x in rows] or ["_—_"]
-        out.append("| " + " | ".join(cells) + " |")
+        row_cells.append("<br><br>".join(cards))
+    out.append("| " + " | ".join(row_cells) + " |")
     out.append("")
     # Burndown
     out.append("## ⏳ Burndown")
