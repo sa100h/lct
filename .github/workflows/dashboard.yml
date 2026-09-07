@@ -1,0 +1,32 @@
+name: dashboard
+
+# Автообновление канбан-сводки и burndown в README при изменениях в tracker/
+on:
+  push:
+    branches: [main]
+    paths:
+      - "tracker/**"
+      - "README.md"
+
+permissions:
+  contents: write
+
+jobs:
+  regen:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Generate dashboard
+        run: python tracker/gen_dashboard.py
+      - name: Commit changes
+        run: |
+          git config user.name "niceplan-bot"
+          git config user.email "niceplan-bot@users.noreply.github.com"
+          git diff --quiet && git diff --staged --quiet && echo "nothing to commit" || {
+            git add README.md
+            git commit -m "chore(tracker): regenerate dashboard"
+            git push
+          }

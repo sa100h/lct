@@ -1,0 +1,20 @@
+# ============================================================
+# NicePlan — конфигурация трекера
+# Отредактируйте значения, затем запустите:
+#   python3 tracker/gen_dashboard.py
+# ============================================================
+
+project_name = "LCT — прогнозная диагностика коллекторов (i.moscow)"
+# Файлы задач (относительно корня репозитория)
+tasks_path = "tracker/tasks"
+
+[sprint]
+name = "Sprint 1 — протокол + ML core"
+state = "active"
+start = "2026-09-07"
+duration_days = 7
+capacity_points = 16
+
+[hackathon]
+event = "i.moscow 2026"
+deadline = "2026-09-14"
