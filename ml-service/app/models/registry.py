@@ -67,6 +67,14 @@ class ModelRegistry:
     def feature_names(self, category: str) -> list[str]:
         return _load_meta(category).get("feature_names", [])
 
+    def threshold(self, category: str) -> float:
+        """Decision threshold chosen during evaluation (meta.json 'threshold', default 0.5)."""
+        t = _load_meta(category).get("threshold", 0.5)
+        try:
+            return float(t)
+        except (TypeError, ValueError):
+            return 0.5
+
     def status(self, category: str) -> ModelState:
         meta = _load_meta(category)
         if not meta:

@@ -53,12 +53,13 @@ class PredictEngine:
         probability = min(max(probability, 0.0), 1.0)
 
         state = self._registry.status(category)
+        threshold = self._registry.threshold(category)
         return Prediction(
             category=category,  # type: ignore[arg-type]
             subject_id=subject_id,
             risk_score=probability,
             probability=probability,
-            predicted_label=probability >= 0.5,
+            predicted_label=probability >= threshold,
             horizon_hours=horizon_hours,
             predicted_at=datetime.now(timezone.utc),
             model_version=state.model_version,
