@@ -1,4 +1,4 @@
-Stage 1: per-(channel, day) aggregate of the full SMVU journal.
+"""Stage 1: per-(channel, day) aggregate of the full SMVU journal.
 
 Reads extracted per-year journals (19GB total) in 2M-row chunks, pre-reduces
 each chunk to (channel, day) partials, then a final groupby per year.
