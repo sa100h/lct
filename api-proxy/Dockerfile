@@ -1,9 +1,11 @@
 FROM node:22 AS frontend-build
 WORKDIR /src/web-frontend
-COPY web-frontend/package*.json ./
-RUN npm ci
+ENV COREPACK_ENABLE_DOWNLOAD_PROMPT=0
+RUN corepack enable
+COPY web-frontend/package.json web-frontend/pnpm-lock.yaml ./
+RUN pnpm install --frozen-lockfile
 COPY web-frontend/ .
-RUN npm run build
+RUN pnpm run build
 
 FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
 ARG BUILD_CONFIGURATION=Release
