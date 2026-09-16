@@ -62,14 +62,24 @@ def trail_sum(x: np.ndarray, w: int) -> np.ndarray:
 
 
 def since_last(x: np.ndarray) -> np.ndarray:
-    """Days since last strictly-positive day (999 if never)."""
+    """Days since last positive day, as of end of day t-1 (same day EXCLUDED).
+
+    The label is defined on day t (alarm/critical state on day t). A feature
+    that reports 0 when day t itself is positive would directly encode the
+    label (since_alar==0  <=>  alarm today  =>  label=1), inflating AUC to
+    ~1.0. So we shift the same-day result right by one: feature[t] = days
+    last positive day <= t-1. 0 = alarmed yesterday, 999 = never. This matches
+    the 'decision at end of day t-1' horizon.
+    """
     out = np.full(len(x), 999, np.int32)
     idx = np.flatnonzero(x)
     if len(idx):
         run = np.maximum.accumulate(np.where(x > 0, np.arange(len(x)) + 1, 0))
         has = run > 0
         out[has] = (np.arange(len(x))[has] - (run[has] - 1)).astype(np.int32)
-    return out
+    shifted = np.full_like(out, 999)
+    shifted[1:] = out[:-1]  # feature at t uses history strictly before t
+    return shifted
 
 
 class ChunkWriter:
