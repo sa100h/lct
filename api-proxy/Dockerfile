@@ -13,14 +13,23 @@ COPY shared/shared.csproj shared/
 RUN dotnet restore api-proxy/api-proxy.csproj
 COPY . .
 RUN dotnet publish api-proxy/api-proxy.csproj -c $BUILD_CONFIGURATION -o /app/publish /p:UseAppHost=false
-RUN mkdir -p /https && dotnet dev-certs https -ep /https/aspnetapp.pfx -p change-me && chmod 644 /https/aspnetapp.pfx
 
-FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS final
-USER $APP_UID
+FROM mcr.microsoft.com/dotnet/sdk:10.0 AS dev-certificate
+RUN mkdir -p /https && dotnet dev-certs https --export-path /https/fullchain.pem --format PEM --no-password && mv /https/fullchain.key /https/privkey.pem
+
+FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS runtime
 WORKDIR /app
 EXPOSE 8080
 EXPOSE 8443
 COPY --from=build /app/publish .
-COPY --from=build /https/aspnetapp.pfx /https/aspnetapp.pfx
 COPY --from=frontend-build /src/web-frontend/dist ./wwwroot
+USER $APP_UID
 ENTRYPOINT ["dotnet", "api-proxy.dll"]
+
+FROM runtime AS local
+USER root
+COPY --from=dev-certificate /https/fullchain.pem /https/privkey.pem /https/
+RUN chmod 644 /https/fullchain.pem && chown $APP_UID:$APP_UID /https/privkey.pem && chmod 600 /https/privkey.pem
+USER $APP_UID
+
+FROM runtime AS final

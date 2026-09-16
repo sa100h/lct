@@ -68,7 +68,7 @@ services:
     ports: ["${GRAFANA_PORT:-3000}:3000"]
     environment:
       GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
-      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-change-me}
     volumes:
       - ./observability/grafana/dashboards:/var/lib/grafana/dashboards:ro
       - ./observability/grafana/provisioning:/etc/grafana/provisioning:ro
@@ -103,8 +103,8 @@ services:
       ASPNETCORE_HTTPS_PORT: ${API_PROXY_HTTPS_PORT:-443}
       Kestrel__Endpoints__Http__Url: http://+:8080
       Kestrel__Endpoints__Https__Url: https://+:8443
-      Kestrel__Endpoints__Https__Certificate__Path: ${KESTREL_CERTIFICATE_PATH:-/https/aspnetapp.pfx}
-      Kestrel__Endpoints__Https__Certificate__Password: ${KESTREL_CERTIFICATE_PASSWORD}
+      Kestrel__Endpoints__Https__Certificate__Path: /https/fullchain.pem
+      Kestrel__Endpoints__Https__Certificate__KeyPath: /https/privkey.pem
       Observability__OtlpEndpoint: ""
     volumes:
       - ${CERTS_PATH:-./certs}:/https:ro

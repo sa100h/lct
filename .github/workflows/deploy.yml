@@ -115,18 +115,46 @@ jobs:
           cd "$DEPLOY_PATH"
           [[ -f .env ]] || { echo "Expected $DEPLOY_PATH/.env" >&2; exit 1; }
           tar -xzf deploy-bundle.tgz
-          cat > .env.release <<RELEASE_ENV
+          requested_namespace=$IMAGE_NAMESPACE
+          if [[ -f .env.release ]]; then
+            . ./.env.release
+          else
+            for service in api-proxy app-service ml-service; do
+              [[ " $DEPLOY_SERVICES " == *" $service "* ]] || {
+                echo "First deployment must select all three services." >&2
+                exit 1
+              }
+            done
+          fi
+          for service in $DEPLOY_SERVICES; do
+            case "$service" in
+              api-proxy) API_PROXY_IMAGE_TAG=$IMAGE_TAG ;;
+              app-service) APP_SERVICE_IMAGE_TAG=$IMAGE_TAG ;;
+              ml-service) ML_SERVICE_IMAGE_TAG=$IMAGE_TAG ;;
+            esac
+          done
+          : "${API_PROXY_IMAGE_TAG:?Missing api-proxy release tag}"
+          : "${APP_SERVICE_IMAGE_TAG:?Missing app-service release tag}"
+          : "${ML_SERVICE_IMAGE_TAG:?Missing ml-service release tag}"
+          IMAGE_REGISTRY=ghcr.io
+          IMAGE_NAMESPACE=$requested_namespace
+          umask 077
+          next_release=$(mktemp .env.release.XXXXXX)
+          trap 'rm -f "$next_release"' EXIT
+          cat > "$next_release" <<RELEASE_ENV
           IMAGE_REGISTRY=ghcr.io
           IMAGE_NAMESPACE=${IMAGE_NAMESPACE}
-          API_PROXY_IMAGE_TAG=${IMAGE_TAG}
-          APP_SERVICE_IMAGE_TAG=${IMAGE_TAG}
-          ML_SERVICE_IMAGE_TAG=${IMAGE_TAG}
+          API_PROXY_IMAGE_TAG=${API_PROXY_IMAGE_TAG}
+          APP_SERVICE_IMAGE_TAG=${APP_SERVICE_IMAGE_TAG}
+          ML_SERVICE_IMAGE_TAG=${ML_SERVICE_IMAGE_TAG}
           RELEASE_ENV
+          compose=(docker compose -f docker-compose.deploy.yml --env-file .env --env-file "$next_release")
           printf '%s' "$GHCR_TOKEN" | docker login ghcr.io -u "$GHCR_USERNAME" --password-stdin
-          docker compose -f docker-compose.deploy.yml --env-file .env --env-file .env.release --profile observability stop loki tempo otel-collector prometheus grafana promtail node-exporter
-          docker compose -f docker-compose.deploy.yml --env-file .env --env-file .env.release pull $DEPLOY_SERVICES
-          docker compose -f docker-compose.deploy.yml --env-file .env --env-file .env.release up -d $DEPLOY_SERVICES
-          running=$(docker compose -f docker-compose.deploy.yml --env-file .env --env-file .env.release ps --services --status running)
+          "${compose[@]}" --profile observability stop loki tempo otel-collector prometheus grafana promtail node-exporter
+          "${compose[@]}" pull $DEPLOY_SERVICES
+          "${compose[@]}" up -d $DEPLOY_SERVICES
+          running=$("${compose[@]}" ps --services --status running)
           for service in $DEPLOY_SERVICES; do grep -qx "$service" <<< "$running"; done
+          mv "$next_release" .env.release
           if [[ -n "$OPTIONAL_HEALTHCHECK_URL" ]]; then curl --fail --retry 10 --retry-delay 5 "$OPTIONAL_HEALTHCHECK_URL"; fi
           EOF

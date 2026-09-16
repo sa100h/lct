@@ -3,6 +3,7 @@ obj/
 .vs/
 .vscode/
 .env
+.env.release
 node_modules/
 dist/
 *.csproj.user

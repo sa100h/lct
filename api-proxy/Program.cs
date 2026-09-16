@@ -8,10 +8,12 @@ public static class Program
     {
         var builder = WebApplication.CreateBuilder(args);
         builder.AddSharedObservability("api-proxy");
+        builder.Services.AddHttpsRedirection(options =>
+            options.RedirectStatusCode = StatusCodes.Status308PermanentRedirect);
         builder.Services.AddReverseProxy().LoadFromConfig(builder.Configuration.GetSection("ReverseProxy"));
 
         var app = builder.Build();
-        app.UseSharedHttpsRedirection();
+        app.UseHttpsRedirection();
         app.UseDefaultFiles();
         app.UseStaticFiles();
         app.UseSharedObservability();

@@ -96,16 +96,6 @@ public static class SharedObservabilityBuilderExtensions
         return app;
     }
 
-    public static WebApplication UseSharedHttpsRedirection(this WebApplication app)
-    {
-        app.UseWhen(
-            context => !context.Request.Path.StartsWithSegments(HealthPath)
-                && !context.Request.Path.StartsWithSegments(HealthMetricsPath)
-                && !context.Request.Path.StartsWithSegments(MetricsPath),
-            branch => branch.UseHttpsRedirection());
-        return app;
-    }
-
     private static LogEventLevel ParseLevel(string configured, LogEventLevel fallback) =>
         Enum.TryParse<LogEventLevel>(configured, true, out var level) ? level : fallback;
 }

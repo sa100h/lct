@@ -111,14 +111,15 @@ services:
     build:
       context: .
       dockerfile: api-proxy/Dockerfile
-    ports: ["80:8080", "443:8443"]
+      target: local
+    ports: ["${API_PROXY_HTTP_PORT:-80}:8080", "${API_PROXY_HTTPS_PORT:-443}:8443"]
     environment:
       ASPNETCORE_ENVIRONMENT: Development
       ASPNETCORE_HTTPS_PORT: ${API_PROXY_HTTPS_PORT:-443}
       Kestrel__Endpoints__Http__Url: http://+:8080
       Kestrel__Endpoints__Https__Url: https://+:8443
-      Kestrel__Endpoints__Https__Certificate__Path: ${KESTREL_CERTIFICATE_PATH:-/https/aspnetapp.pfx}
-      Kestrel__Endpoints__Https__Certificate__Password: ${KESTREL_CERTIFICATE_PASSWORD:-change-me}
+      Kestrel__Endpoints__Https__Certificate__Path: /https/fullchain.pem
+      Kestrel__Endpoints__Https__Certificate__KeyPath: /https/privkey.pem
       Observability__OtlpEndpoint: ""
     read_only: true
     tmpfs: ["/tmp:size=50M"]
