@@ -29,7 +29,7 @@ import numpy as np
 import pyarrow as pa
 import pyarrow.parquet as pq
 from sklearn.ensemble import HistGradientBoostingClassifier
-from sklearn.metrics import precision_score, recall_score
+from sklearn.metrics import average_precision_score, precision_score, recall_score, roc_auc_score
 
 from app.models.features import features_for
 from app.models.registry import get_registry
@@ -154,13 +154,16 @@ def _train_real(category: str, test_year: int) -> dict:
     )
     model.fit(Xtr, ytr)
 
-    pred = (model.predict_proba(Xte)[:, 1] >= 0.5).astype(int)
+    proba = model.predict_proba(Xte)[:, 1]
+    pred = (proba >= 0.5).astype(int)
 
     metrics = {
         "source": f"real ({FEAT_DIR.name})",
         "split": f"train<2026={tr_count:,} (fit on {len(ytr):,}), test={test_year}={te_count:,}",
         "train_positive_rate": round(float(ytr.mean()), 4),
         "test_positive_rate": round(float(yte.mean()), 4),
+        "test_auc": round(float(roc_auc_score(yte, proba)), 4),
+        "test_average_precision": round(float(average_precision_score(yte, proba)), 4),
         "test_precision": round(float(precision_score(yte, pred, zero_division=0)), 4),
         "test_recall": round(float(recall_score(yte, pred, zero_division=0)), 4),
     }
