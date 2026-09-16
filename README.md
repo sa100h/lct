@@ -36,7 +36,7 @@ python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
 dotnet run --project app-service
 
 # web-frontend
-cd web-frontend && npm ci && npm run dev
+cd web-frontend && pnpm install --frozen-lockfile && pnpm run dev
 ```
 
 ## ML-сервис
