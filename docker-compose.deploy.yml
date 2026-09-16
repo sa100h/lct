@@ -20,6 +20,7 @@ services:
     networks: [app-network]
 
   loki:
+    profiles: [observability]
     image: grafana/loki:3.4.2
     command: ["-config.file=/etc/loki/config.yaml"]
     volumes:
@@ -29,6 +30,7 @@ services:
     networks: [app-network]
 
   tempo:
+    profiles: [observability]
     image: grafana/tempo:2.8.2
     command: ["-config.file=/etc/tempo/config.yaml"]
     volumes:
@@ -38,6 +40,7 @@ services:
     networks: [app-network]
 
   otel-collector:
+    profiles: [observability]
     image: otel/opentelemetry-collector-contrib:0.128.0
     command: ["--config=/etc/otelcol-contrib/config.yaml"]
     volumes:
@@ -49,6 +52,7 @@ services:
     networks: [app-network]
 
   prometheus:
+    profiles: [observability]
     image: prom/prometheus:v2.54.1
     command: ["--config.file=/etc/prometheus/prometheus.yml", "--storage.tsdb.path=/prometheus"]
     ports: ["${PROMETHEUS_PORT:-9090}:9090"]
@@ -59,6 +63,7 @@ services:
     networks: [app-network]
 
   grafana:
+    profiles: [observability]
     image: grafana/grafana:11.6.0
     ports: ["${GRAFANA_PORT:-3000}:3000"]
     environment:
@@ -72,6 +77,7 @@ services:
     networks: [app-network]
 
   promtail:
+    profiles: [observability]
     image: grafana/promtail:3.4.2
     command: ["-config.file=/etc/promtail/config.yaml", "-config.expand-env=true"]
     environment:
@@ -83,6 +89,7 @@ services:
     networks: [app-network]
 
   node-exporter:
+    profiles: [observability]
     image: prom/node-exporter:v1.8.2
     restart: unless-stopped
     networks: [app-network]
@@ -98,7 +105,7 @@ services:
       Kestrel__Endpoints__Https__Url: https://+:8443
       Kestrel__Endpoints__Https__Certificate__Path: ${KESTREL_CERTIFICATE_PATH:-/https/aspnetapp.pfx}
       Kestrel__Endpoints__Https__Certificate__Password: ${KESTREL_CERTIFICATE_PASSWORD}
-      Observability__OtlpEndpoint: http://otel-collector:4317
+      Observability__OtlpEndpoint: ""
     volumes:
       - ${CERTS_PATH:-./certs}:/https:ro
     read_only: true
@@ -107,7 +114,6 @@ services:
     security_opt: ["no-new-privileges:true"]
     depends_on:
       app-service: { condition: service_started }
-      otel-collector: { condition: service_started }
     restart: unless-stopped
     networks: [app-network]
 
@@ -119,7 +125,7 @@ services:
       ConnectionStrings__AppDb: Host=postgres;Port=5432;Database=app_db;Username=app_service;Password=${APP_DB_PASSWORD}
       Migrations__Path: /migrations/app_db
       MlService__BaseUrl: http://ml-service:8000
-      Observability__OtlpEndpoint: http://otel-collector:4317
+      Observability__OtlpEndpoint: ""
     volumes:
       - ./postgres-db/migrations:/migrations:ro
     read_only: true
@@ -128,7 +134,6 @@ services:
     security_opt: ["no-new-privileges:true"]
     depends_on:
       postgres: { condition: service_healthy }
-      otel-collector: { condition: service_started }
     restart: unless-stopped
     networks: [app-network]
 

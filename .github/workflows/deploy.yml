@@ -26,6 +26,11 @@ on:
         required: true
         type: boolean
         default: false
+      deploy_ml_service:
+        description: Deploy ml-service
+        required: true
+        type: boolean
+        default: false
 
 concurrency:
   group: deploy-${{ inputs.environment }}
@@ -50,6 +55,7 @@ jobs:
           services=()
           [[ "${{ inputs.deploy_api_proxy }}" == "true" ]] && services+=(api-proxy)
           [[ "${{ inputs.deploy_app_service }}" == "true" ]] && services+=(app-service)
+          [[ "${{ inputs.deploy_ml_service }}" == "true" ]] && services+=(ml-service)
           [[ ${#services[@]} -gt 0 ]] || { echo "Select at least one service." >&2; exit 1; }
           echo "services=${services[*]}" >> "$GITHUB_OUTPUT"
       - name: Resolve ref
@@ -114,8 +120,10 @@ jobs:
           IMAGE_NAMESPACE=${IMAGE_NAMESPACE}
           API_PROXY_IMAGE_TAG=${IMAGE_TAG}
           APP_SERVICE_IMAGE_TAG=${IMAGE_TAG}
+          ML_SERVICE_IMAGE_TAG=${IMAGE_TAG}
           RELEASE_ENV
           printf '%s' "$GHCR_TOKEN" | docker login ghcr.io -u "$GHCR_USERNAME" --password-stdin
+          docker compose -f docker-compose.deploy.yml --env-file .env --env-file .env.release --profile observability stop loki tempo otel-collector prometheus grafana promtail node-exporter
           docker compose -f docker-compose.deploy.yml --env-file .env --env-file .env.release pull $DEPLOY_SERVICES
           docker compose -f docker-compose.deploy.yml --env-file .env --env-file .env.release up -d $DEPLOY_SERVICES
           running=$(docker compose -f docker-compose.deploy.yml --env-file .env --env-file .env.release ps --services --status running)

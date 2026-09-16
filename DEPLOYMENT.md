@@ -1,6 +1,8 @@
 # Deployment
 
-Pipeline сохраняет трехступенчатую схему: CI проверяет код и Dockerfile, `Publish Images` публикует выбранные образы в GHCR, `Deploy` устанавливает выбранные сервисы на сервер по SSH.
+Pipeline сохраняет трехступенчатую схему: CI проверяет код и Dockerfile, `Publish Images` публикует выбранные образы в GHCR, `Deploy` устанавливает выбранные сервисы на сервер по SSH. Для первого запуска выберите все три сервиса (`api-proxy`, `app-service`, `ml-service`) и опубликуйте все три образа с одним тегом.
+
+Сервисы наблюдаемости в `docker-compose.deploy.yml` находятся в профиле `observability` и при обычном деплое не запускаются. Логи приложений доступны через `docker compose logs`.
 
 ## GitHub secrets для environment
 

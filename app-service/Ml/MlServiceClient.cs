@@ -1,4 +1,5 @@
 using System.Net.Http.Json;
+using System.Text.Json;
 using AppService.Contracts;
 
 namespace AppService.Ml;
@@ -10,6 +11,11 @@ namespace AppService.Ml;
 /// </summary>
 public sealed class MlServiceClient(HttpClient http)
 {
+    private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web)
+    {
+        PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower,
+    };
+
     private static readonly string[] KnownCategories =
     {
         "sensor-failure",
@@ -27,8 +33,9 @@ public sealed class MlServiceClient(HttpClient http)
                 $"Unknown category '{request.Category}'. Expected one of: {string.Join(", ", KnownCategories)}.");
         }
 
-        var payload = new MlPredictRequest(request.Category, request.SubjectId, request.CurrentFeatures, request.HorizonHours);
-        var response = await http.PostAsJsonAsync("/predict", payload, ct);
+        var payload = new MlPredictRequest(
+            request.Category, request.SubjectId, request.CurrentFeatures ?? new Dictionary<string, double>(), request.HorizonHours);
+        var response = await http.PostAsJsonAsync("/predict", payload, JsonOptions, ct);
 
         if (!response.IsSuccessStatusCode)
         {
@@ -36,7 +43,7 @@ public sealed class MlServiceClient(HttpClient http)
             throw new HttpRequestException($"ml-service /predict failed ({(int)response.StatusCode}): {body}");
         }
 
-        return await response.Content.ReadFromJsonAsync<MlPredictResponse>(cancellationToken: ct)
+        return await response.Content.ReadFromJsonAsync<PredictionDto>(JsonOptions, ct)
                ?? throw new InvalidOperationException("ml-service returned an empty body.");
     }
 
@@ -47,19 +54,19 @@ public sealed class MlServiceClient(HttpClient http)
         {
             throw new HttpRequestException($"ml-service /status failed ({(int)response.StatusCode}).");
         }
-        return await response.Content.ReadFromJsonAsync<StatusDto>(cancellationToken: ct)
+        return await response.Content.ReadFromJsonAsync<StatusDto>(JsonOptions, ct)
                ?? throw new InvalidOperationException("ml-service /status returned an empty body.");
     }
 }
 
-// Wire-format DTOs (camelCase via JSON serializer defaults).
+// Wire-format DTOs (snake_case via JsonOptions, matching FastAPI).
 internal sealed record MlPredictRequest(
     string Category,
     string SubjectId,
-    Dictionary<string, double>? CurrentFeatures,
+    Dictionary<string, double> CurrentFeatures,
     int HorizonHours);
 
-public sealed class MlPredictResponse
+public sealed class PredictionDto
 {
     public string Category { get; init; } = string.Empty;
     public string SubjectId { get; init; } = string.Empty;
@@ -80,14 +87,11 @@ public sealed class StatusDto
     public DateTime Now { get; init; }
 }
 
-/// <summary>Alias used by the predict endpoint (ml-service response shape).</summary>
-public sealed class PredictionDto : MlPredictResponse;
-
 public sealed class MlModelStatus
 {
     public string Category { get; init; } = string.Empty;
     public string State { get; init; } = string.Empty;
     public string ModelVersion { get; init; } = string.Empty;
     public DateTime? TrainedAt { get; init; }
-    public Dictionary<string, double>? Metrics { get; init; }
+    public Dictionary<string, JsonElement>? Metrics { get; init; }
 }

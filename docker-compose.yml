@@ -19,27 +19,30 @@ services:
       start_period: 10s
     security_opt: ["no-new-privileges:true"]
     restart: unless-stopped
-    networks: app-network
+    networks: [app-network]
 
-  # loki:
-  #   image: grafana/loki:3.4.2
-  #   command: ["-config.file=/etc/loki/config.yaml"]
-  #   volumes:
-  #     - ./observability/loki/config.yaml:/etc/loki/config.yaml:ro
-  #     - loki_data:/loki
-  #   restart: unless-stopped
-  #   networks: [app-network]
+  loki:
+    profiles: [observability]
+    image: grafana/loki:3.4.2
+    command: ["-config.file=/etc/loki/config.yaml"]
+    volumes:
+      - ./observability/loki/config.yaml:/etc/loki/config.yaml:ro
+      - loki_data:/loki
+    restart: unless-stopped
+    networks: [app-network]
 
-  # tempo:
-  #   image: grafana/tempo:2.8.2
-  #   command: ["-config.file=/etc/tempo/config.yaml"]
-  #   volumes:
-  #     - ./observability/tempo/config.yaml:/etc/tempo/config.yaml:ro
-  #     - tempo_data:/var/tempo
-  #   restart: unless-stopped
-  #   networks: [app-network]
+  tempo:
+    profiles: [observability]
+    image: grafana/tempo:2.8.2
+    command: ["-config.file=/etc/tempo/config.yaml"]
+    volumes:
+      - ./observability/tempo/config.yaml:/etc/tempo/config.yaml:ro
+      - tempo_data:/var/tempo
+    restart: unless-stopped
+    networks: [app-network]
 
   otel-collector:
+    profiles: [observability]
     image: otel/opentelemetry-collector-contrib:0.128.0
     command: ["--config=/etc/otelcol-contrib/config.yaml"]
     ports: ["4317:4317", "4318:4318"]
@@ -47,9 +50,9 @@ services:
       - ./observability/otel-collector/config.yaml:/etc/otelcol-contrib/config.yaml:ro
     depends_on:
       loki: { condition: service_started }
-      # tempo: { condition: service_started }
+      tempo: { condition: service_started }
     restart: unless-stopped
-    networks: app-network
+    networks: [app-network]
 
   # prometheus:
   #   image: prom/prometheus:v2.54.1
@@ -116,16 +119,15 @@ services:
       Kestrel__Endpoints__Https__Url: https://+:8443
       Kestrel__Endpoints__Https__Certificate__Path: ${KESTREL_CERTIFICATE_PATH:-/https/aspnetapp.pfx}
       Kestrel__Endpoints__Https__Certificate__Password: ${KESTREL_CERTIFICATE_PASSWORD:-change-me}
-      Observability__OtlpEndpoint: http://otel-collector:4317
+      Observability__OtlpEndpoint: ""
     read_only: true
     tmpfs: ["/tmp:size=50M"]
     cap_drop: [ALL]
     security_opt: ["no-new-privileges:true"]
     depends_on:
       app-service: { condition: service_started }
-      otel-collector: { condition: service_started }
     restart: unless-stopped
-    networks: app-network
+    networks: [app-network]
 
   app-service:
     build:
@@ -136,7 +138,7 @@ services:
       ConnectionStrings__AppDb: Host=postgres;Port=5432;Database=app_db;Username=app_service;Password=${APP_DB_PASSWORD}
       Migrations__Path: /migrations/app_db
       MlService__BaseUrl: http://ml-service:8000
-      Observability__OtlpEndpoint: http://otel-collector:4317
+      Observability__OtlpEndpoint: ""
     volumes:
       - ./postgres-db/migrations:/migrations:ro
     read_only: true
@@ -145,9 +147,8 @@ services:
     security_opt: ["no-new-privileges:true"]
     depends_on:
       postgres: { condition: service_healthy }
-      otel-collector: { condition: service_started }
     restart: unless-stopped
-    networks: app-network
+    networks: [app-network]
 
   ml-service:
     build:
@@ -165,13 +166,13 @@ services:
     depends_on:
       postgres: { condition: service_healthy }
     restart: unless-stopped
-    networks: app-network
+    networks: [app-network]
 
 volumes:
   postgres_data:
-  # loki_data:
+  loki_data:
   # prometheus_data:
-  # tempo_data:
+  tempo_data:
   # grafana_data:
   ml_models:
 

@@ -5,7 +5,7 @@
 ## Архитектура
 
 ```
-browser → api-proxy (YARP:5000)
+browser → api-proxy (YARP:80/443)
              ├── web-frontend   (Vue 3, :5173)
              ├── app-service    (ASP.NET Core, :8080) — БД, реестры, заявки
              └── ml-service     (FastAPI, :8000)   — ML-модели
@@ -19,8 +19,8 @@ cp .env.example .env      # сменить пароли
 docker compose up --build
 ```
 
-- API-шлюз: http://localhost:5000
-- ML-сервис напрямую: http://localhost:8000/docs
+- API-шлюз: https://localhost (локальный самоподписанный сертификат)
+- ML API через шлюз: https://localhost/api/ml/docs
 - Миграции применяются автоматически при старте app-service (набор `002_lct_domain.sql`)
 
 ### Локальная разработка без Docker
@@ -53,8 +53,9 @@ cd web-frontend && npm ci && npm run dev
 
 ## Наблюдательность
 
-Grafana `http://localhost:3000` (admin / `GRAFANA_ADMIN_PASSWORD`),
-Prometheus `:9090`, Tempo `:3200`, Loki `:3100`.
+Локальный Compose по умолчанию оставляет только логи контейнеров Docker.
+OpenTelemetry Collector, Tempo и Loki можно включить профилем `observability`;
+Grafana и Prometheus пока закомментированы в `docker-compose.yml`.
 
 <!-- NICEPLAN:BOARD -->
 
