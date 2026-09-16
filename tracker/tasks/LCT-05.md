@@ -1,5 +1,5 @@
 ---
-id: LCT-05; title: Миграции доменной схемы БД; column: Review; points: 3; assignee: Ildar; due: 2026-09-09; tags: backend;db
+id: LCT-05; title: Миграции доменной схемы БД; column: Review; points: 3; assignee: dima; due: 2026-09-29; tags: backend;db
 ---
 # LCT-05 — Миграции доменной схемы БД
 

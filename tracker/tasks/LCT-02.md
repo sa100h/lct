@@ -1,5 +1,5 @@
 ---
-id: LCT-02; title: Ингест датчиков и признаки; column: In Progress; points: 5; assignee: Eduard; due: 2026-09-09; tags: ml;data
+id: LCT-02; title: Ингест датчиков и признаки; column: In Progress; points: 5; assignee: sa100h; due: 2026-09-09; tags: ml
 ---
 # LCT-02 — Ингест датчиков и признаки
 

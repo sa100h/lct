@@ -1,5 +1,5 @@
 ---
-id: LCT-04; title: Аналитика выгрузок организатора; column: Backlog; points: 2; assignee: Ildar; due: 2026-09-11; tags: data;ml
+id: LCT-04; title: Аналитика выгрузок организатора; column: Backlog; points: 2; assignee: sa100h; due: 2026-09-17; tags: data;ml
 ---
 # LCT-04 — Аналитика выгрузок организатора
 

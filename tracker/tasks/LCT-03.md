@@ -1,5 +1,5 @@
 ---
-id: LCT-03; title: Обучение и приёмка моделей; column: To Do; points: 5; assignee: Eduard; due: 2026-09-10; tags: ml
+id: LCT-03; title: Обучение и приёмка моделей; column: To Do; points: 5; assignee: sa100h; due: 2026-09-29; tags: ml
 ---
 # LCT-03 — Обучение и приёмка моделей
 

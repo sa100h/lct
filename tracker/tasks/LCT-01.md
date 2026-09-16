@@ -1,5 +1,5 @@
 ---
-id: LCT-01; title: Контракт ML API согласован; column: Done; points: 3; assignee: Ildar; due: 2026-09-08; tags: ml;backend
+id: LCT-01; title: Контракт ML API согласован; column: Done; points: 3; assignee: sa100h,artaktavi; due: 2026-09-17; tags: ml;backend
 ---
 # LCT-01 — Контракт ML API согласован
 
