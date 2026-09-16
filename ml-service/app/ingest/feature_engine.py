@@ -138,6 +138,12 @@ def build_category(cat: str, sen: pd.DataFrame, years: list[int],
                    crit_names: list[str]) -> None:
     chset = cat_channels(CATS[cat], sen)
     crit_idx = [i for i, s in enumerate(STATES) if s in crit_names]
+    # fire-risk: label = new incident. A *critical state* only counts when it
+    # BEGAN on day t (was not critical on t-1); an alarm always counts (alarms
+    # are discrete events). Without this, 99.7% of fire-risk positives are
+    # long-state continuations and the task degenerates to "was it critical
+    # yesterday".
+    new_incident = (cat == "fire-risk")
 
     rng = np.random.default_rng(12345)
     base_cols = ["n_events", "n_alarm", "n_num", "num_sum", "num_sumsq", "num_min", "num_max"]
@@ -218,6 +224,13 @@ def build_category(cat: str, sen: pd.DataFrame, years: list[int],
         crit_full = np.zeros(span, np.int8)
         for i in crit_idx:
             crit_full = np.maximum(crit_full, (full[:, i] > 0).astype(np.int8))
+        if new_incident:
+            # critical counts only when it began on day t: previous calendar
+            # day (t-1) within the same span was not critical. Gap days are
+            # zeros, so a state starting after a data gap also counts.
+            prev_crit = np.zeros(span, np.int8)
+            prev_crit[1:] = crit_full[:-1]
+            crit_full = ((crit_full > 0) & (prev_crit == 0)).astype(np.int8)
         label = np.maximum((al > 0).astype(np.int8), crit_full)
 
         st7 = np.stack([trail_sum(full[:, i], W7) for i in range(N_STATES)], axis=1)
