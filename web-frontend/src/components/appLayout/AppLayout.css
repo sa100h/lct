@@ -1,0 +1,15 @@
+.app-layout {
+    min-height: 100vh;
+}
+
+.app-layout-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding-inline: 16px;
+    background: #fff;
+}
+
+.app-layout-content {
+    padding: 16px;
+}
