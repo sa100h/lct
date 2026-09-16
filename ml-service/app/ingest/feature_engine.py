@@ -179,9 +179,11 @@ def build_category(cat: str, sen: pd.DataFrame, years: list[int],
     feat_cols = (
         ["e7", "a7", "e30", "a30", "n7", "m7", "s7", "n30", "m30", "s30",
          "act7", "act30", "ar7", "ar30", "since_act", "since_alar", "div30"]
+        + (["rep_gap"] if new_incident else [])
         + [f"t7_{i}" for i in range(N_STATES)]
         + [f"t30_{i}" for i in range(N_STATES)]
     )
+    n_head = 18 if new_incident else 17
 
     tmp = FEAT / f".tmp-{cat}"
     if tmp.exists():
@@ -220,6 +222,18 @@ def build_category(cat: str, sen: pd.DataFrame, years: list[int],
         ar30 = a30 / np.maximum(e30, 1)
         since_act = since_last(active.astype(np.int8)).astype(np.float32)
         since_alar = since_last(al).astype(np.float32)
+        # calendar days since the channel was last REPORTED at all. Unlike
+        # since_act/since_alar (event history) this encodes reporting cadence:
+        # for fire channels 2026 reporting got much more sporadic (42% of rows
+        # follow a consecutive day vs 58% in 2024), and a "new incident" on a
+        # long-gap day is a different phenomenon than one on day N of a
+        # continuous stream. feature[t] = days since the channel was last
+        # reported (0 = reported on day t itself, i.e. every non-gap day).
+        rep_gap = np.full(span, 999, np.float32)
+        grid = dd[0] + np.arange(span)
+        last_idx = np.searchsorted(dd, grid, side="right") - 1
+        has = last_idx >= 0
+        rep_gap[has] = np.minimum(grid[has] - dd[last_idx[has]], 999)
 
         crit_full = np.zeros(span, np.int8)
         for i in crit_idx:
@@ -242,8 +256,13 @@ def build_category(cat: str, sen: pd.DataFrame, years: list[int],
             [e7, a7, e30, a30, cn7, m7, s7, cn30, m30, s30,
              act7, act30, ar7, ar30, since_act, since_alar, div30], axis=1
         )
-        feats[:, 17:17 + N_STATES] = st7
-        feats[:, 17 + N_STATES:] = st30
+        if new_incident:
+            feats[:, 17] = rep_gap
+            st_start = 18
+        else:
+            st_start = 17
+        feats[:, st_start:st_start + N_STATES] = st7
+        feats[:, st_start + N_STATES:] = st30
 
         # emit rows: drop warmup, downsample negatives (per-segment, keeps RAM low)
         keep_idx = np.arange(W30, span)
