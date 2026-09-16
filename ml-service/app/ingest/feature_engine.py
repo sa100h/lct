@@ -222,16 +222,18 @@ def build_category(cat: str, sen: pd.DataFrame, years: list[int],
         ar30 = a30 / np.maximum(e30, 1)
         since_act = since_last(active.astype(np.int8)).astype(np.float32)
         since_alar = since_last(al).astype(np.float32)
-        # calendar days since the channel was last REPORTED at all. Unlike
-        # since_act/since_alar (event history) this encodes reporting cadence:
-        # for fire channels 2026 reporting got much more sporadic (42% of rows
-        # follow a consecutive day vs 58% in 2024), and a "new incident" on a
-        # long-gap day is a different phenomenon than one on day N of a
-        # continuous stream. feature[t] = days since the channel was last
-        # reported (0 = reported on day t itself, i.e. every non-gap day).
+        # calendar days since the channel was last REPORTED, as of end of day t-1.
+        # side="left" takes the last report strictly BEFORE day t: on a reported
+        # day t the value is >=1 (1 = reported yesterday), never 0. The previous
+        # version (side="right") returned 0 on day t itself, leaking "channel
+        # reported today" into the features — one column then carried the label
+        # (all 2026 positives had rep_gap==0, 88% of negatives >0, AUC 0.94).
+        # Like since_act/since_alar, this encodes reporting cadence: a new
+        # incident on a long-gap day is a different phenomenon than one on day
+        # N of a continuous stream.
         rep_gap = np.full(span, 999, np.float32)
         grid = dd[0] + np.arange(span)
-        last_idx = np.searchsorted(dd, grid, side="right") - 1
+        last_idx = np.searchsorted(dd, grid, side="left") - 1
         has = last_idx >= 0
         rep_gap[has] = np.minimum(grid[has] - dd[last_idx[has]], 999)
 
@@ -264,8 +266,13 @@ def build_category(cat: str, sen: pd.DataFrame, years: list[int],
         feats[:, st_start:st_start + N_STATES] = st7
         feats[:, st_start + N_STATES:] = st30
 
-        # emit rows: drop warmup, downsample negatives (per-segment, keeps RAM low)
-        keep_idx = np.arange(W30, span)
+        # emit rows: reported days only, after warmup; downsample negatives
+        # (per-segment, keeps RAM low). Gap days are NOT emitted: a new
+        # incident is only observable in a report, and all-zero gap rows made
+        # the label a reporting-cadence predictor (rep_gap leak, AUC 0.96).
+        rep_days = np.zeros(span, np.bool_)
+        rep_days[idx] = True
+        keep_idx = np.flatnonzero(rep_days & (np.arange(span) >= W30))
         lab = label[keep_idx]
         pos = keep_idx[lab == 1]
         neg = keep_idx[lab == 0]
