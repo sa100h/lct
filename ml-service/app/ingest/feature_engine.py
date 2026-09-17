@@ -4,15 +4,18 @@ One row per (channel, day) inside each channel's observed span per year:
   - features: trailing 7d/30d aggregates over days strictly BEFORE day t
     (events, alarms, numeric stats, state counts, activity density, days since
     last activity/alarm, state diversity) — no same-day information.
+    Plus: calendar seasonality (month sin/cos, day of week) and static
+    per-channel cabinet/object codes.
   - label: 1 if on day t the channel emits an alarm (тревожение=true) or any
     category-critical state (per vocab.json "critical").
 
 Horizon: decision made at end of day t-1, outcome measured on day t (24h).
 Negatives are downsampled per channel-span (~1:NEG_RATIO, seeded) to keep
-RAM bounded on a 3GB box; the trainer re-balances globally.
-Rows are written to temporary parquet chunks (FLUSH_ROWS each) and merged
-into ml-data/features/features-<category>.parquet at the end, so the full
-frame is never materialized in RAM.
+RAM bounded on a ~4GB box; the trainer re-balances globally.
+Memory: ONE year is read at a time and emitted rows go straight to temporary
+parquet parts (FLUSH_ROWS each); the cross-year channel-day matrix is never
+materialized. Channel spans are cut at year boundaries (up to 30d of warm-up
+history is lost at each January 1 — negligible over 8 years).
 """
 from __future__ import annotations
 
@@ -89,7 +92,6 @@ class ChunkWriter:
         self.tmp = tmp
         self.feat_cols = feat_cols
         self.rng = rng
-        self.nfeat = len(feat_cols)
         self.chunk_id = 0
         self.total_rows = 0
         self.F: list[np.ndarray] = []
@@ -148,38 +150,20 @@ def build_category(cat: str, sen: pd.DataFrame, years: list[int],
     rng = np.random.default_rng(12345)
     base_cols = ["n_events", "n_alarm", "n_num", "num_sum", "num_sumsq", "num_min", "num_max"]
     s_cols = [f"s_{i}" for i in range(N_STATES)]
+    # static per-channel references: channel id -> cabinet / object code, so the
+    # model can learn cabinet- and object-level effects. Unmatched -> -1.
+    sen_ch = sen.copy()
+    sen_ch["ид_канала_данных"] = sen_ch["ид_канала_данных"].astype(str)
+    sen_ch = sen_ch.set_index("ид_канала_данных")
+    cab_enc = sen_ch["cabinet"].to_dict()
+    obj_enc = sen_ch["ид_объект"].to_dict()
     t0 = time.time()
-
-    frames = []
-    for year in years:
-        f = AGG / f"agg-{year}.parquet"
-        if not f.exists():
-            print(f"  [warn] missing {f}", flush=True)
-            continue
-        df = pd.read_parquet(f, columns=["channel", "day", *base_cols, *s_cols])
-        df = df[df["channel"].isin(chset)]
-        for c in ("num_min", "num_max"):
-            df[c] = df[c].fillna(0.0)
-        df["year"] = year
-        frames.append(df)
-    df = pd.concat(frames, ignore_index=True).sort_values(["channel", "day"])
-    del frames
-
-    mat = df[base_cols + s_cols].to_numpy(np.float32)
-    day_ts = pd.to_datetime(df["day"].to_numpy()).to_numpy()
-    d_ord = (day_ts.astype("datetime64[D]").astype(np.int64)).astype(np.int64)
-    chan = df["channel"].to_numpy()
-    del df, day_ts
-    n = len(d_ord)
-    print(f"  {cat}: {n:,} channel-days, {len(np.unique(chan))} channels", flush=True)
-
-    change = np.flatnonzero(chan[:-1] != chan[1:]) + 1
-    bounds = np.concatenate([[0], change, [n]])
 
     feat_cols = (
         ["e7", "a7", "e30", "a30", "n7", "m7", "s7", "n30", "m30", "s30",
          "act7", "act30", "ar7", "ar30", "since_act", "since_alar", "div30"]
         + (["rep_gap"] if new_incident else [])
+        + ["month_sin", "month_cos", "dow", "cabinet", "object_code"]
         + [f"t7_{i}" for i in range(N_STATES)]
         + [f"t30_{i}" for i in range(N_STATES)]
     )
@@ -191,102 +175,140 @@ def build_category(cat: str, sen: pd.DataFrame, years: list[int],
     tmp.mkdir(parents=True, exist_ok=True)
     writer = ChunkWriter(tmp, feat_cols, rng)
 
-    for k, (s, e) in enumerate(zip(bounds[:-1], bounds[1:])):
-        if (k + 1) % 1000 == 0:
-            print(f"  {cat}: channels {k+1}/{len(bounds)-1} elapsed={time.time()-t0:.0f}s "
-                  f"rows={writer.total_rows:,}", flush=True)
-        dd = d_ord[s:e]
-        seg = mat[s:e]
-        span = dd[-1] - dd[0] + 1
-        if span > 4000:
+    for year in years:
+        f = AGG / f"agg-{year}.parquet"
+        if not f.exists():
+            print(f"  [warn] missing {f}", flush=True)
             continue
-        full = np.zeros((span, seg.shape[1]), np.float32)
-        idx = np.searchsorted(np.arange(dd[0], dd[0] + span), dd)
-        full[idx, :] = seg
-        ev, al = full[:, 0], full[:, 1]
-        nn, nsum, nsq = full[:, 2], full[:, 3], full[:, 4]
+        df = pd.read_parquet(f, columns=["channel", "day", *base_cols, *s_cols])
+        df = df[df["channel"].isin(chset)].sort_values(["channel", "day"])
+        for c in ("num_min", "num_max"):
+            df[c] = df[c].fillna(0.0)
+        mat = df[base_cols + s_cols].to_numpy(np.float32)
+        day_ts = np.asarray(df["day"].to_numpy(), dtype="datetime64[D]")  # day-ordinals
+        d_ord = day_ts.astype(np.int64)
+        chan = df["channel"].to_numpy()
+        n = len(d_ord)
+        if n == 0:
+            del df, mat, d_ord, chan
+            continue
+        print(f"  {cat} {year}: {n:,} channel-days, {len(np.unique(chan))} channels "
+              f"elapsed={time.time()-t0:.0f}s", flush=True)
 
-        e7, a7 = trail_sum(ev, W7), trail_sum(al, W7)
-        e30, a30 = trail_sum(ev, W30), trail_sum(al, W30)
-        cn7 = trail_sum(nn, W7); cs7 = trail_sum(nsum, W7); c27 = trail_sum(nsq, W7)
-        cn30 = trail_sum(nn, W30); cs30 = trail_sum(nsum, W30); c230 = trail_sum(nsq, W30)
-        m7 = np.where(cn7 > 0, cs7 / np.maximum(cn7, 1), 0.0)
-        s7 = np.sqrt(np.clip(c27 / np.maximum(cn7, 1) - m7**2, 0, None))
-        m30 = np.where(cn30 > 0, cs30 / np.maximum(cn30, 1), 0.0)
-        s30 = np.sqrt(np.clip(c230 / np.maximum(cn30, 1) - m30**2, 0, None))
+        change = np.flatnonzero(chan[:-1] != chan[1:]) + 1
+        bounds = np.concatenate([[0], change, [n]])
 
-        active = ev > 0
-        act7 = trail_sum(active.astype(np.float32), W7) / W7
-        act30 = trail_sum(active.astype(np.float32), W30) / W30
-        ar7 = a7 / np.maximum(e7, 1)
-        ar30 = a30 / np.maximum(e30, 1)
-        since_act = since_last(active.astype(np.int8)).astype(np.float32)
-        since_alar = since_last(al).astype(np.float32)
-        # calendar days since the channel was last REPORTED, as of end of day t-1.
-        # side="left" takes the last report strictly BEFORE day t: on a reported
-        # day t the value is >=1 (1 = reported yesterday), never 0. The previous
-        # version (side="right") returned 0 on day t itself, leaking "channel
-        # reported today" into the features — one column then carried the label
-        # (all 2026 positives had rep_gap==0, 88% of negatives >0, AUC 0.94).
-        # Like since_act/since_alar, this encodes reporting cadence: a new
-        # incident on a long-gap day is a different phenomenon than one on day
-        # N of a continuous stream.
-        rep_gap = np.full(span, 999, np.float32)
-        grid = dd[0] + np.arange(span)
-        last_idx = np.searchsorted(dd, grid, side="left") - 1
-        has = last_idx >= 0
-        rep_gap[has] = np.minimum(grid[has] - dd[last_idx[has]], 999)
+        k = 0
+        for s, e in zip(bounds[:-1], bounds[1:]):
+            if (k + 1) % 2000 == 0:
+                print(f"  {cat}: channels {k+1}/{len(bounds)-1} "
+                      f"rows={writer.total_rows:,}", flush=True)
+            dd = d_ord[s:e]
+            seg = mat[s:e]
+            span = dd[-1] - dd[0] + 1
+            if span > 4000:
+                continue
+            full = np.zeros((span, seg.shape[1]), np.float32)
+            idx = np.searchsorted(np.arange(dd[0], dd[0] + span), dd)
+            full[idx, :] = seg
+            ev, al = full[:, 0], full[:, 1]
+            nn, nsum, nsq = full[:, 2], full[:, 3], full[:, 4]
 
-        crit_full = np.zeros(span, np.int8)
-        for i in crit_idx:
-            crit_full = np.maximum(crit_full, (full[:, i] > 0).astype(np.int8))
-        if new_incident:
-            # critical counts only when it began on day t: previous calendar
-            # day (t-1) within the same span was not critical. Gap days are
-            # zeros, so a state starting after a data gap also counts.
-            prev_crit = np.zeros(span, np.int8)
-            prev_crit[1:] = crit_full[:-1]
-            crit_full = ((crit_full > 0) & (prev_crit == 0)).astype(np.int8)
-        label = np.maximum((al > 0).astype(np.int8), crit_full)
+            e7, a7 = trail_sum(ev, W7), trail_sum(al, W7)
+            e30, a30 = trail_sum(ev, W30), trail_sum(al, W30)
+            cn7 = trail_sum(nn, W7); cs7 = trail_sum(nsum, W7); c27 = trail_sum(nsq, W7)
+            cn30 = trail_sum(nn, W30); cs30 = trail_sum(nsum, W30); c230 = trail_sum(nsq, W30)
+            m7 = np.where(cn7 > 0, cs7 / np.maximum(cn7, 1), 0.0)
+            s7 = np.sqrt(np.clip(c27 / np.maximum(cn7, 1) - m7**2, 0, None))
+            m30 = np.where(cn30 > 0, cs30 / np.maximum(cn30, 1), 0.0)
+            s30 = np.sqrt(np.clip(c230 / np.maximum(cn30, 1) - m30**2, 0, None))
 
-        st7 = np.stack([trail_sum(full[:, i], W7) for i in range(N_STATES)], axis=1)
-        st30 = np.stack([trail_sum(full[:, i], W30) for i in range(N_STATES)], axis=1)
-        div30 = (st30 > 0).sum(axis=1).astype(np.float32)
+            active = ev > 0
+            act7 = trail_sum(active.astype(np.float32), W7) / W7
+            act30 = trail_sum(active.astype(np.float32), W30) / W30
+            ar7 = a7 / np.maximum(e7, 1)
+            ar30 = a30 / np.maximum(e30, 1)
+            since_act = since_last(active.astype(np.int8)).astype(np.float32)
+            since_alar = since_last(al).astype(np.float32)
+            # calendar days since the channel was last REPORTED, as of end of
+            # day t-1. side="left" takes the last report strictly BEFORE day t
+            # (>=1 on a reported day, never 0): the previous side="right"
+            # version returned 0 on day t itself and leaked "channel reported
+            # today" into features (all 2026 positives had rep_gap==0, AUC
+            # 0.94). Encodes reporting cadence, not the label.
+            rep_gap = np.full(span, 999, np.float32)
+            grid = dd[0] + np.arange(span)
+            last_idx = np.searchsorted(dd, grid, side="left") - 1
+            has = last_idx >= 0
+            rep_gap[has] = np.minimum(grid[has] - dd[last_idx[has]], 999)
 
-        feats = np.empty((span, len(feat_cols)), np.float32)
-        feats[:, 0:17] = np.stack(
-            [e7, a7, e30, a30, cn7, m7, s7, cn30, m30, s30,
-             act7, act30, ar7, ar30, since_act, since_alar, div30], axis=1
-        )
-        if new_incident:
-            feats[:, 17] = rep_gap
-            st_start = 18
-        else:
-            st_start = 17
-        feats[:, st_start:st_start + N_STATES] = st7
-        feats[:, st_start + N_STATES:] = st30
+            crit_full = np.zeros(span, np.int8)
+            for i in crit_idx:
+                crit_full = np.maximum(crit_full, (full[:, i] > 0).astype(np.int8))
+            if new_incident:
+                # critical counts only when it began on day t: previous
+                # calendar day (t-1) within the same span was not critical.
+                # Gap days are zeros, so a state starting after a data gap
+                # also counts.
+                prev_crit = np.zeros(span, np.int8)
+                prev_crit[1:] = crit_full[:-1]
+                crit_full = ((crit_full > 0) & (prev_crit == 0)).astype(np.int8)
+            label = np.maximum((al > 0).astype(np.int8), crit_full)
 
-        # emit rows: reported days only, after warmup; downsample negatives
-        # (per-segment, keeps RAM low). Gap days are NOT emitted: a new
-        # incident is only observable in a report, and all-zero gap rows made
-        # the label a reporting-cadence predictor (rep_gap leak, AUC 0.96).
-        rep_days = np.zeros(span, np.bool_)
-        rep_days[idx] = True
-        keep_idx = np.flatnonzero(rep_days & (np.arange(span) >= W30))
-        lab = label[keep_idx]
-        pos = keep_idx[lab == 1]
-        neg = keep_idx[lab == 0]
-        n_keep_neg = min(len(neg), max(len(pos) * NEG_RATIO, 1))
-        if n_keep_neg < len(neg):
-            neg = rng.choice(neg, size=n_keep_neg, replace=False)
-        sel = np.concatenate([pos, neg])
-        writer.add(feats, dd[0], sel, label, chan[s:e][0])
+            st7 = np.stack([trail_sum(full[:, i], W7) for i in range(N_STATES)], axis=1)
+            st30 = np.stack([trail_sum(full[:, i], W30) for i in range(N_STATES)], axis=1)
+            div30 = (st30 > 0).sum(axis=1).astype(np.float32)
 
-        if writer.pending >= FLUSH_ROWS:
-            writer.flush()
+            feats = np.empty((span, len(feat_cols)), np.float32)
+            feats[:, 0:17] = np.stack(
+                [e7, a7, e30, a30, cn7, m7, s7, cn30, m30, s30,
+                 act7, act30, ar7, ar30, since_act, since_alar, div30], axis=1
+            )
+            if new_incident:
+                feats[:, 17] = rep_gap
+                extra_start = 18
+            else:
+                extra_start = 17
+            # seasonality (calendar, no leak: purely a function of day t) +
+            # static per-channel cabinet/object codes (NaN -> -1)
+            gdt = pd.to_datetime((dd[0] + np.arange(span)).astype(np.int64), unit="D")
+            mnum = gdt.month.to_numpy()
+            feats[:, extra_start:extra_start + 2] = np.stack(
+                [np.sin(2 * np.pi * mnum / 12.0), np.cos(2 * np.pi * mnum / 12.0)],
+                axis=1,
+            ).astype(np.float32)
+            feats[:, extra_start + 2] = gdt.dayofweek.to_numpy().astype(np.float32)
+            ch_id = chan[s:e][0]
+            feats[:, extra_start + 3] = cab_enc.get(str(ch_id), -1)
+            feats[:, extra_start + 4] = obj_enc.get(str(ch_id), -1)
+            st_start = extra_start + 5
+            feats[:, st_start:st_start + N_STATES] = st7
+            feats[:, st_start + N_STATES:] = st30
+
+            # emit rows: reported days only, after warmup; downsample
+            # negatives (per-segment, keeps RAM low). Gap days are NOT
+            # emitted: a new incident is only observable in a report, and
+            # all-zero gap rows made the label a reporting-cadence predictor
+            # (rep_gap leak, AUC 0.96).
+            rep_days = np.zeros(span, np.bool_)
+            rep_days[idx] = True
+            keep_idx = np.flatnonzero(rep_days & (np.arange(span) >= W30))
+            lab = label[keep_idx]
+            pos = keep_idx[lab == 1]
+            neg = keep_idx[lab == 0]
+            n_keep_neg = min(len(neg), max(len(pos) * NEG_RATIO, 1))
+            if n_keep_neg < len(neg):
+                neg = rng.choice(neg, size=n_keep_neg, replace=False)
+            sel = np.concatenate([pos, neg])
+            writer.add(feats, dd[0], sel, label, chan[s:e][0])
+
+            if writer.pending >= FLUSH_ROWS:
+                writer.flush()
+            k += 1
+        del df, mat, d_ord, chan, day_ts
 
     writer.flush()
-    del mat, d_ord, chan, writer
+    del writer
 
     # merge chunk parts into the final single parquet
     parts = sorted(tmp.glob("part-*.parquet"))
@@ -310,6 +332,7 @@ def build_category(cat: str, sen: pd.DataFrame, years: list[int],
 
 def main() -> None:
     sen = pd.read_csv(BASE / "справочник_каналов_датчиков.csv")
+    sen["cabinet"] = sen["тег_инженерной_системы"].astype(str).str.extract(r"^(\d+)-")[0]
     vocab = json.loads((BASE / "vocab.json").read_text(encoding="utf-8"))
     cats = sys.argv[1:] if len(sys.argv) > 1 else list(CATS.keys())
     for cat in cats:
