@@ -24,7 +24,7 @@ app-service (`shared/DatabaseMigration/PostgresMigrator.cs`), idempotentно.
 ## Настройки
 
 | Переменная | Назначение |
-|------------|-----------|
+|------------|------------|
 | `POSTGRES_PASSWORD` | пароль суперпользователя `postgres` |
 | `APP_DB_PASSWORD` | пароль пользователя `app_service` |
 

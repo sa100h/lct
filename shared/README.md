@@ -15,7 +15,7 @@
 ## Настройки
 
 | Переменная | По умолчанию | Назначение |
-|------------|--------------|-----------|
+|------------|--------------|------------|
 | `Observability__OtlpEndpoint` | `http://otel-collector:4317` | OTLP gRPC |
 | `Observability__DefaultLogLevel` | `Information` | |
 | `Observability__EnableAspNetCoreTracing` | `true` | |
