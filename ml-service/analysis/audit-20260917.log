@@ -1,0 +1,51 @@
+[sensor-failure] critical states: ['Не замкнут', 'Неисправен', 'Обесточен', 'Затоплен', 'Отключено устройство', 'Много неисправных устройств', 'Питание от батарей']
+[sensor-failure] train=1,000,000 (pos_rate=0.792) test2026=180,182 (pos_rate=0.833) load=2s
+
+[sensor-failure] SINGLE-FEATURE diagnostics on 2026:
+  AUC(since_alar==0) = 0.4933  (==0: pos=0.035 neg=0.049)
+
+[sensor-failure] MODELS on 2026:
+  V0 all           feats= 74  AUC=0.9539  PR-AUC=0.9908  P@.5=0.9579  R@.5=0.9399  (81s)
+  V1 no since_*    feats= 72  AUC=0.9498  PR-AUC=0.99  P@.5=0.9609  R@.5=0.9298  (76s)
+  V2 history-only  feats= 68  AUC=0.9486  PR-AUC=0.9898  P@.5=0.9581  R@.5=0.9301  (73s)
+[sensor-failure] total 234s
+
+[fire-risk] critical states: ['Обнаружен дым', 'Обнаружен газ', 'Внимание', 'Опасность', 'Высокая температура', 'Низкая температура', 'Замыкание']
+[fire-risk] train=112,443 (pos_rate=0.216) test2026=36,432 (pos_rate=0.364) load=0s
+
+[fire-risk] SINGLE-FEATURE diagnostics on 2026:
+  AUC(rep_gap) = 0.5987  (==0: pos=0.000 neg=0.000)
+  AUC(since_alar==0) = 0.5082  (==0: pos=0.059 neg=0.043)
+
+[fire-risk] MODELS on 2026:
+  V0 all           feats= 75  AUC=0.4652  PR-AUC=0.3679  P@.5=0.5445  R@.5=0.0535  (9s)
+  V1 no since_*    feats= 73  AUC=0.5077  PR-AUC=0.3868  P@.5=0.46  R@.5=0.0494  (9s)
+  V2 history-only  feats= 69  AUC=0.5603  PR-AUC=0.4379  P@.5=0.5981  R@.5=0.0822  (8s)
+[fire-risk] total 27s
+
+[unauthorized-access] critical states: ['Не замкнут', 'Обнаружено движение', 'Замыкание', 'Обрыв']
+[unauthorized-access] train=406,234 (pos_rate=0.852) test2026=28,721 (pos_rate=0.858) load=0s
+
+[unauthorized-access] SINGLE-FEATURE diagnostics on 2026:
+  AUC(since_alar==0) = 0.5120  (==0: pos=0.044 neg=0.020)
+
+[unauthorized-access] MODELS on 2026:
+  V0 all           feats= 74  AUC=0.8973  PR-AUC=0.9804  P@.5=0.9151  R@.5=0.9725  (35s)
+  V1 no since_*    feats= 72  AUC=0.8974  PR-AUC=0.9804  P@.5=0.9156  R@.5=0.9717  (33s)
+  V2 history-only  feats= 68  AUC=0.8982  PR-AUC=0.9806  P@.5=0.9145  R@.5=0.9732  (31s)
+[unauthorized-access] total 100s
+
+[infrastructure-wear] critical states: ['Неисправен', 'Обесточен', 'Затоплен', 'Отключено устройство', 'Много неисправных устройств']
+[infrastructure-wear] train=570,724 (pos_rate=0.426) test2026=39,808 (pos_rate=0.399) load=1s
+
+[infrastructure-wear] SINGLE-FEATURE diagnostics on 2026:
+  AUC(since_alar==0) = 0.5312  (==0: pos=0.121 neg=0.058)
+
+[infrastructure-wear] MODELS on 2026:
+  V0 all           feats= 74  AUC=0.8002  PR-AUC=0.7696  P@.5=0.7481  R@.5=0.6405  (44s)
+  V1 no since_*    feats= 72  AUC=0.7926  PR-AUC=0.7545  P@.5=0.7469  R@.5=0.6378  (42s)
+  V2 history-only  feats= 68  AUC=0.794  PR-AUC=0.7559  P@.5=0.7358  R@.5=0.6441  (41s)
+[infrastructure-wear] total 129s
+
+AUDIT DONE
+AUDIT_EXIT=0
