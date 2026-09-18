@@ -2,14 +2,14 @@ name: lct
 
 services:
   postgres:
-    image: postgres:15
+    image: postgres:18
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       POSTGRES_DB: postgres
       APP_DB_PASSWORD: ${APP_DB_PASSWORD}
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - postgres_data:/var/lib/postgresql
       - ./postgres-db/init:/docker-entrypoint-initdb.d:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres"]
@@ -17,7 +17,7 @@ services:
       timeout: 5s
       retries: 5
       start_period: 10s
-    security_opt: ["no-new-privileges:true"]
+    #security_opt: ["no-new-privileges:true"]
     restart: unless-stopped
     networks: [app-network]
 
@@ -169,6 +169,27 @@ services:
     restart: unless-stopped
     networks: [app-network]
 
+  ad:
+    build:
+      context: .
+      dockerfile: ad/Dockerfile
+    hostname: dc1
+    domainname: LCT.RU
+    privileged: true
+    restart: unless-stopped
+    dns:
+      - 127.0.0.1
+    environment:
+      - DOMAIN=${DOMAIN}
+      - DOMAINPASS=${DOMAINPASS}
+      - DNSFORWARDER=${DNSFORWARDER}
+      - HOSTIP=${HOSTIP}
+      - JOIN=${JOIN}
+    volumes:
+      - ad_data:/var/lib/samba
+      - ad_config:/etc/samba/external
+    networks: [app-network]
+
 volumes:
   postgres_data:
   # loki_data:
@@ -176,6 +197,8 @@ volumes:
   # tempo_data:
   # grafana_data:
   ml_models:
+  ad_data:
+  ad_config:
 
 networks:
   app-network:
