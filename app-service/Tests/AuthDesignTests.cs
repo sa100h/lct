@@ -7,6 +7,9 @@ using AppService.Services.Domain;
 using AppService.Services;
 using AppService.Models;
 using AppService.Services.Infrastructure;
+using AppService.Extensions;
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Http;
 using Shared.Authentication;
 using Xunit;
 
@@ -105,5 +108,21 @@ public sealed class AuthDesignTests
         {
             Directory.Delete(directory, recursive: true);
         }
+    }
+
+    [Fact]
+    public void PermissionPolicyValidation_RejectsPermissionMissingFromMatrix()
+    {
+        var endpoint = new Endpoint(
+            _ => Task.CompletedTask,
+            new EndpointMetadataCollection(new AuthorizeAttribute { Policy = PermissionCodes.DemoAccess }),
+            "AuthzDemoController.Get");
+        var catalog = new RoleAccessCatalog(
+            [new RoleDefinition("admin", "CN=Admins,DC=lct,DC=ru", ["other.access"])]);
+
+        var error = Assert.Throws<InvalidOperationException>(
+            () => PermissionPolicyValidationExtensions.EnsureConfigured([endpoint], catalog));
+        Assert.Contains(PermissionCodes.DemoAccess, error.Message);
+        Assert.Contains("AuthzDemoController.Get", error.Message);
     }
 }
