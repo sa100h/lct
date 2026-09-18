@@ -78,12 +78,12 @@ bind через LDAPS. Refresh читает состояние и группы �
 ## Локальный запуск
 
 ```bash
-pwsh ./scripts/generate-jwt-keys.ps1   # один раз, если ключей ещё нет
-$env:Jwt__PublicKeyPath = (Resolve-Path .keys/jwt-public.pem).Path
-$env:Jwt__PrivateKeyPath = (Resolve-Path .keys/jwt-private.pem).Path
-$env:Ad__Host = 'dc1.lct.ru'
-$env:Ad__CertificatePath = 'путь-к-публичному-ldaps.pem'
-$env:Ad__BindPassword = 'пароль-lct-app-bind'
+./scripts/generate-jwt-keys.sh   # один раз, если ключей ещё нет
+export Jwt__PublicKeyPath="$(realpath .keys/jwt-public.pem)"
+export Jwt__PrivateKeyPath="$(realpath .keys/jwt-private.pem)"
+export Ad__Host='dc1.lct.ru'
+export Ad__CertificatePath='путь-к-публичному-ldaps.pem'
+export Ad__BindPassword='пароль-lct-app-bind'
 dotnet run --project app-service
 ```
 

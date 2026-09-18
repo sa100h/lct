@@ -3,6 +3,13 @@ import React from 'react'
 import ReactDOM from 'react-dom'
 import { loadYmaps3 } from './loadYmaps3.js'
 
+const SCHEME_WITHOUT_POI = [
+  {
+    tags: { any: ['poi'] },
+    stylers: [{ visibility: 'off' }],
+  },
+]
+
 export default function YandexMap({ apikey, markers, selectedId, onSelect, onError }) {
   const [mapApi, setMapApi] = useState(null)
   const selected = useMemo(
@@ -19,14 +26,9 @@ export default function YandexMap({ apikey, markers, selectedId, onSelect, onErr
         await window.ymaps3.ready
         const ymaps3React = await window.ymaps3.import('@yandex/ymaps3-reactify')
         const reactify = ymaps3React.reactify.bindTo(React, ReactDOM)
-        const {
-          YMap,
-          YMapDefaultSchemeLayer,
-          YMapDefaultFeaturesLayer,
-          YMapMarker,
-        } = reactify.module(window.ymaps3)
+        const { YMap, YMapDefaultSchemeLayer, YMapMarker } = reactify.module(window.ymaps3)
         if (!cancelled) {
-          setMapApi({ YMap, YMapDefaultSchemeLayer, YMapDefaultFeaturesLayer, YMapMarker })
+          setMapApi({ YMap, YMapDefaultSchemeLayer, YMapMarker })
         }
       } catch {
         if (!cancelled) {
@@ -45,13 +47,12 @@ export default function YandexMap({ apikey, markers, selectedId, onSelect, onErr
     return <div className="map-canvas" />
   }
 
-  const { YMap, YMapDefaultSchemeLayer, YMapDefaultFeaturesLayer, YMapMarker } = mapApi
+  const { YMap, YMapDefaultSchemeLayer, YMapMarker } = mapApi
 
   return (
     <div className="map-canvas">
       <YMap location={{ center: selected.coordinates, zoom: 11 }}>
-        <YMapDefaultSchemeLayer />
-        <YMapDefaultFeaturesLayer />
+        <YMapDefaultSchemeLayer customization={SCHEME_WITHOUT_POI} />
         {markers.map((marker) => (
           <YMapMarker key={marker.id} coordinates={marker.coordinates}>
             <button
