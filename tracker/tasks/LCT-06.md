@@ -1,5 +1,5 @@
 ---
-id: LCT-06; title: API: реестры, события, заявки; column: In Progress; points: 5; assignee: Ildar; due: 2026-09-10; tags: backend
+id: LCT-06; title: API: реестры, события, заявки; column: Backlog; points: 5; assignee: artaktavi; due: 2026-09-29; tags: backend
 ---
 # LCT-06 — API: реестры, события, заявки
 
