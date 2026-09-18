@@ -6,10 +6,11 @@
 
 ```
 browser → api-proxy (YARP:80/443)
-             ├── web-frontend   (Vue 3, :5173)
+             ├── web-frontend   (Vue 3; статика собирается в api-proxy target `local`, dev-сервер :5173)
              ├── app-service    (ASP.NET Core, :8080) — БД, реестры, заявки
              └── ml-service     (FastAPI, :8000)   — ML-модели
    postgres (app_db: equipment, alarm_events, predictions, maintenance_requests)
+   ad (Samba AD DC, lct.ru, LDAP/LDAPS — учётки диспетчеров/техников)
 ```
 
 ## Быстрый старт
@@ -39,6 +40,20 @@ dotnet run --project app-service
 cd web-frontend && pnpm install --frozen-lockfile && pnpm run dev
 ```
 
+## Каталоги проекта
+
+| Каталог | Что внутри | README |
+|---------|-----------|--------|
+| `api-proxy/` | YARP-шлюз: маршруты `/api/app`, `/api/ml`, статика фронтенда | [→](api-proxy/README.md) |
+| `app-service/` | ASP.NET Core API: реестры, события, заявки | [→](app-service/README.md) |
+| `ml-service/` | FastAPI: ML-модели, ingest, предсказания | [→](ml-service/README.md) |
+| `web-frontend/` | Vue 3 SPA: дашборд, карта, заявки | [→](web-frontend/README.md) |
+| `ad/` | Samba AD DC: учётки домена lct.ru (LDAPS) | [→](ad/README.md) |
+| `postgres-db/` | PostgreSQL: init-скрипты + миграции app_db | [→](postgres-db/README.md) |
+| `shared/` | Общий C#: PostgresMigrator, Observability-билдер | [→](shared/README.md) |
+| `observability/` | Grafana-стек (профиль `observability`) | [→](observability/README.md) |
+| `tracker/` | Git-native доска NicePlan (генерация в этот README) | [→](tracker/README.md) |
+
 ## ML-сервис
 
 - **Эндпоинты**: `POST /predict`, `POST /retrain`, `GET /status`, `GET /healthz`
@@ -53,9 +68,14 @@ cd web-frontend && pnpm install --frozen-lockfile && pnpm run dev
 
 ## Наблюдательность
 
-Локальный Compose по умолчанию оставляет только логи контейнеров Docker.
-OpenTelemetry Collector, Tempo и Loki можно включить профилем `observability`;
-Grafana и Prometheus пока закомментированы в `docker-compose.yml`.
+Локальный `docker-compose.yml` по умолчанию поднимает только сервисы
+стэка без телеметрии (OTLP-экспорт в сервисах выключен пустым
+`Observability__OtlpEndpoint`). Полный набор — OpenTelemetry Collector,
+Tempo, Loki, Promtail, Prometheus, Grafana, node-exporter — нарезан
+профилем `observability` в `docker-compose.deploy.yml`
+(`docker compose -f docker-compose.deploy.yml --profile observability up -d`).
+
+См. [observability/README.md](observability/README.md).
 
 <!-- NICEPLAN:BOARD -->
 
