@@ -7,7 +7,7 @@ public sealed class AuthSessionService(
     IAdIdentityProvider directory,
     IAuthRepository store,
     ITokenIssuer tokens,
-    DirectoryRoleMapper roleMapper,
+    RoleAccessCatalog roleAccess,
     JwtOptions jwtOptions,
     TimeProvider timeProvider) : IAuthSessionService
 {
@@ -30,7 +30,7 @@ public sealed class AuthSessionService(
             await store.DeactivateAndRevokeAllAsync(identity.Id, timeProvider.GetUtcNow(), cancellationToken);
             return AuthResult.Failed(AuthError.Forbidden);
         }
-        if (!roleMapper.TryResolveRole(identity.Groups, out var role))
+        if (!roleAccess.TryResolveRole(identity.Groups, out var role))
             return AuthResult.Failed(AuthError.Forbidden);
 
         var now = timeProvider.GetUtcNow();
@@ -53,6 +53,16 @@ public sealed class AuthSessionService(
         if (presented is null)
             return AuthResult.Failed(AuthError.InvalidRefreshToken);
 
+        var checkedAt = timeProvider.GetUtcNow();
+        if (presented.ConsumedAt is not null)
+        {
+            if (presented.ExpiresAt > checkedAt)
+                await store.RevokeFamilyAsync(presentedHash, checkedAt, cancellationToken);
+            return AuthResult.Failed(AuthError.InvalidRefreshToken);
+        }
+        if (presented.RevokedAt is not null || presented.ExpiresAt <= checkedAt)
+            return AuthResult.Failed(AuthError.InvalidRefreshToken);
+
         DirectoryIdentity? identity;
         try
         {
@@ -69,7 +79,7 @@ public sealed class AuthSessionService(
             await store.DeactivateAndRevokeAllAsync(presented.UserId, now, cancellationToken);
             return AuthResult.Failed(AuthError.Forbidden);
         }
-        if (!roleMapper.TryResolveRole(identity.Groups, out var role))
+        if (!roleAccess.TryResolveRole(identity.Groups, out var role))
             return AuthResult.Failed(AuthError.Forbidden);
 
         var nextRefresh = tokens.CreateRefresh();
@@ -85,6 +95,6 @@ public sealed class AuthSessionService(
     public async Task LogoutAsync(string? refresh, CancellationToken cancellationToken)
     {
         if (!string.IsNullOrWhiteSpace(refresh) && refresh.Length <= 256)
-            await store.LogoutAsync(tokens.HashRefresh(refresh), timeProvider.GetUtcNow(), cancellationToken);
+            await store.RevokeFamilyAsync(tokens.HashRefresh(refresh), timeProvider.GetUtcNow(), cancellationToken);
     }
 }

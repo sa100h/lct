@@ -1,5 +1,7 @@
 using AppService.Services.Domain;
 using AppService.Services;
+using AppService.Services.Infrastructure;
+using AppService.Models;
 using AppService.Data.Repositories;
 using Shared.Authentication;
 using Shared.DatabaseMigration;
@@ -14,12 +16,23 @@ public static class ServiceCollectionExtensions
             ?? throw new InvalidOperationException("Connection string 'AppDb' is required.");
 
         services.AddSharedJwtAuthentication(configuration, requirePrivateKey: true);
-        services.AddAppAuthorization();
         services.AddSingleton(TimeProvider.System);
-        services.AddSingleton<IAdIdentityProvider, UnavailableAdIdentityProvider>();
+        var ad = configuration.GetSection(AdOptions.SectionName).Get<AdOptions>() ?? new AdOptions();
+        if (string.IsNullOrWhiteSpace(ad.Host) || ad.Port is < 1 or > 65535
+            || string.IsNullOrWhiteSpace(ad.BaseDn) || string.IsNullOrWhiteSpace(ad.BindName)
+            || string.IsNullOrWhiteSpace(ad.BindPassword) || string.IsNullOrWhiteSpace(ad.CertificatePath)
+            || ad.TimeoutSeconds is < 1 or > 60)
+            throw new InvalidOperationException("AD host, base DN, bind credentials, certificate and timeout must be configured.");
+        services.AddSingleton(ad);
+        services.AddSingleton(new AdCertificateValidator(ad.CertificatePath));
+        services.AddSingleton<IAdIdentityProvider, LdapAdIdentityProvider>();
 
-        var groups = configuration.GetSection("AdGroups").Get<AdGroupOptions>() ?? new AdGroupOptions();
-        services.AddSingleton(new DirectoryRoleMapper(groups));
+        var roleOptions = configuration.GetSection(RoleAccessOptions.SectionName).Get<RoleAccessOptions>()
+            ?? new RoleAccessOptions();
+        var roleAccess = new RoleAccessCatalog(roleOptions.Roles.Select(definition =>
+            new RoleDefinition(definition.Code, definition.GroupDn, definition.Permissions)));
+        services.AddSingleton(roleAccess);
+        services.AddAppAuthorization(roleAccess);
 
         var cookie = configuration.GetSection("AuthCookie").Get<AuthCookieOptions>() ?? new AuthCookieOptions();
         if (string.IsNullOrWhiteSpace(cookie.Name) || !cookie.Path.StartsWith('/'))

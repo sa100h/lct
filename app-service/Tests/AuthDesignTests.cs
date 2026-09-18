@@ -1,9 +1,12 @@
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Cryptography;
+using System.Security.Cryptography.X509Certificates;
+using System.Net.Security;
 using System.Text.Json;
 using AppService.Services.Domain;
 using AppService.Services;
 using AppService.Models;
+using AppService.Services.Infrastructure;
 using Shared.Authentication;
 using Xunit;
 
@@ -12,21 +15,25 @@ namespace AppService.Tests;
 public sealed class AuthDesignTests
 {
     [Fact]
-    public void DirectoryRoleMapper_RequiresExactlyOneApplicationGroup()
+    public void RoleAccessCatalog_RequiresExactlyOneApplicationGroup()
     {
-        var mapper = new DirectoryRoleMapper(new AdGroupOptions
-        {
-            Admin = "Admins",
-            Technician = "Technics",
-            DispatcherOds = "Dispetchers_ODS",
-            DispatcherDistrict = "Dispetchers_rayon"
-        });
+        var catalog = CreateCatalog();
 
-        Assert.True(mapper.TryResolveRole(["Domain Users", "Technics"], out var role));
-        Assert.Equal(RoleCatalog.Technician, role);
-        Assert.False(mapper.TryResolveRole(["Admins", "Technics"], out _));
-        Assert.False(mapper.TryResolveRole(["Domain Users"], out _));
+        Assert.True(catalog.TryResolveRole(
+            ["CN=Domain Users,CN=Users,DC=lct,DC=ru", "CN=Technics,OU=Groups,DC=lct,DC=ru"], out var role));
+        Assert.Equal("technician", role);
+        Assert.False(catalog.TryResolveRole(
+            ["CN=Admins,OU=Groups,DC=lct,DC=ru", "CN=Technics,OU=Groups,DC=lct,DC=ru"], out _));
+        Assert.False(catalog.TryResolveRole(["CN=Domain Users,CN=Users,DC=lct,DC=ru"], out _));
+        Assert.Equal([PermissionCodes.DemoAccess], catalog.GetPermissions("technician"));
     }
+
+    private static RoleAccessCatalog CreateCatalog() => new RoleAccessCatalog(
+    [
+        new RoleDefinition("admin", "CN=Admins,OU=Groups,DC=lct,DC=ru", [PermissionCodes.DemoAccess]),
+        new RoleDefinition("technician", "CN=Technics,OU=Groups,DC=lct,DC=ru", [PermissionCodes.DemoAccess]),
+        new RoleDefinition("dispatcher_district", "CN=Dispetchers_rayon,OU=Groups,DC=lct,DC=ru", [PermissionCodes.DemoAccess])
+    ]);
 
     [Fact]
     public void IssuedAccess_ContainsFiveMinuteRoleAndPermissionSnapshot()
@@ -43,13 +50,13 @@ public sealed class AuthDesignTests
                 Issuer = "lct-test",
                 Audience = "lct-test-api",
                 PrivateKeyPath = privatePath
-            });
+            }, CreateCatalog());
 
             var now = new DateTimeOffset(2026, 9, 18, 9, 0, 0, TimeSpan.Zero);
             var userId = Guid.NewGuid();
             var familyId = Guid.NewGuid();
             var jwt = new JwtSecurityTokenHandler().ReadJwtToken(
-                issuer.IssueAccess(userId, familyId, RoleCatalog.DispatcherDistrict, now));
+                issuer.IssueAccess(userId, familyId, "dispatcher_district", now));
 
             Assert.Equal("RS256", jwt.Header.Alg);
             Assert.Equal("lct-test", jwt.Issuer);
@@ -57,11 +64,42 @@ public sealed class AuthDesignTests
             Assert.Equal(now.AddMinutes(5), jwt.ValidTo);
             Assert.Equal(userId.ToString(), jwt.Subject);
             Assert.Equal(familyId.ToString(), jwt.Claims.Single(c => c.Type == JwtClaimNames.SessionId).Value);
-            Assert.Equal(RoleCatalog.DispatcherDistrict, jwt.Claims.Single(c => c.Type == JwtClaimNames.Role).Value);
+            Assert.Equal("dispatcher_district", jwt.Claims.Single(c => c.Type == JwtClaimNames.Role).Value);
             Assert.Contains(jwt.Claims, c => c.Type == JwtClaimNames.Permission && c.Value == PermissionCodes.DemoAccess);
             using var payload = JsonDocument.Parse(jwt.Payload.SerializeToJson());
             Assert.Equal(JsonValueKind.Array,
                 payload.RootElement.GetProperty(JwtClaimNames.Permission).ValueKind);
+        }
+        finally
+        {
+            Directory.Delete(directory, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void AdCertificateValidator_RequiresPinnedCertificateAndMatchingHost()
+    {
+        var directory = Path.Combine(Path.GetTempPath(), $"lct-ad-cert-test-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(directory);
+        try
+        {
+            using var rsa = RSA.Create(2048);
+            var request = new CertificateRequest(
+                "CN=dc1.lct.ru", rsa, HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1);
+            using var certificate = request.CreateSelfSigned(
+                DateTimeOffset.UtcNow.AddDays(-1), DateTimeOffset.UtcNow.AddDays(1));
+            var path = Path.Combine(directory, "ldaps.pem");
+            File.WriteAllText(path, certificate.ExportCertificatePem());
+            var validator = new AdCertificateValidator(path);
+
+            Assert.True(validator.IsValid(certificate, SslPolicyErrors.RemoteCertificateChainErrors));
+            Assert.False(validator.IsValid(certificate, SslPolicyErrors.RemoteCertificateNameMismatch));
+            using var otherRsa = RSA.Create(2048);
+            var otherRequest = new CertificateRequest(
+                "CN=dc1.lct.ru", otherRsa, HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1);
+            using var other = otherRequest.CreateSelfSigned(
+                DateTimeOffset.UtcNow.AddDays(-1), DateTimeOffset.UtcNow.AddDays(1));
+            Assert.False(validator.IsValid(other, SslPolicyErrors.RemoteCertificateChainErrors));
         }
         finally
         {

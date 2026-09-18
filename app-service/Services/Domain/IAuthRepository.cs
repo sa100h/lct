@@ -10,6 +10,6 @@ public interface IAuthRepository
     Task<RefreshRotationResult> RotateAsync(DirectoryIdentity identity, string role, RefreshTokenRecord presented,
         byte[] tokenHash, byte[] nextHash, Guid nextTokenId, DateTimeOffset now, CancellationToken cancellationToken);
     Task DeactivateAndRevokeAllAsync(Guid userId, DateTimeOffset now, CancellationToken cancellationToken);
-    Task LogoutAsync(byte[] tokenHash, DateTimeOffset now, CancellationToken cancellationToken);
+    Task RevokeFamilyAsync(byte[] tokenHash, DateTimeOffset now, CancellationToken cancellationToken);
     Task<bool> IsAccessActiveAsync(Guid userId, Guid familyId, DateTimeOffset now, CancellationToken cancellationToken);
 }

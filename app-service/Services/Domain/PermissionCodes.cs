@@ -2,7 +2,6 @@ namespace AppService.Services.Domain;
 
 public static class PermissionCodes
 {
-    // Example policy. Extend this list together with RoleCatalog when the
-    // business permission matrix is agreed.
+    // Endpoint policy name. Role assignments live in appsettings.json.
     public const string DemoAccess = "demo.access";
 }

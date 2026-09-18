@@ -8,7 +8,8 @@ namespace AppService.Extensions;
 
 public static class AuthAuthorizationExtensions
 {
-    public static IServiceCollection AddAppAuthorization(this IServiceCollection services)
+    public static IServiceCollection AddAppAuthorization(
+        this IServiceCollection services, RoleAccessCatalog roleAccess)
     {
         services.AddAuthorization(options =>
         {
@@ -19,11 +20,14 @@ public static class AuthAuthorizationExtensions
             options.DefaultPolicy = authenticated;
             options.FallbackPolicy = authenticated;
 
-            options.AddPolicy(PermissionCodes.DemoAccess, new AuthorizationPolicyBuilder(JwtBearerDefaults.AuthenticationScheme)
-                .RequireAuthenticatedUser()
-                .AddRequirements(new ActiveFamilyRequirement())
-                .RequireClaim(JwtClaimNames.Permission, PermissionCodes.DemoAccess)
-                .Build());
+            foreach (var permission in roleAccess.AllPermissions)
+            {
+                options.AddPolicy(permission, new AuthorizationPolicyBuilder(JwtBearerDefaults.AuthenticationScheme)
+                    .RequireAuthenticatedUser()
+                    .AddRequirements(new ActiveFamilyRequirement())
+                    .RequireClaim(JwtClaimNames.Permission, permission)
+                    .Build());
+            }
         });
         services.AddScoped<IAuthorizationHandler, ActiveFamilyRequirementHandler>();
         return services;

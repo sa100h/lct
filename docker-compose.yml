@@ -151,6 +151,7 @@ services:
       Jwt__RefreshLifetimeDays: "7"
       Ad__Host: ${AD_TLS_HOSTNAME:-dc1.lct.ru}
       Ad__CertificatePath: /run/certs/ldaps.pem
+      Ad__BindPassword: ${AD_BIND_PASSWORD:?Set AD_BIND_PASSWORD in .env}
       AuthCookie__Name: ${AUTH_REFRESH_COOKIE_NAME:-lct_refresh}
       AuthCookie__Path: ${AUTH_REFRESH_COOKIE_PATH:-/api/app/auth}
     volumes:

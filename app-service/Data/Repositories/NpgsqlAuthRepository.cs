@@ -168,7 +168,7 @@ public sealed class NpgsqlAuthRepository(string connectionString) : IAuthReposit
         await transaction.CommitAsync(cancellationToken);
     }
 
-    public async Task LogoutAsync(byte[] tokenHash, DateTimeOffset now, CancellationToken cancellationToken)
+    public async Task RevokeFamilyAsync(byte[] tokenHash, DateTimeOffset now, CancellationToken cancellationToken)
     {
         await using var connection = await OpenAsync(cancellationToken);
         await using var transaction = await connection.BeginTransactionAsync(cancellationToken);

@@ -13,10 +13,12 @@ public sealed class JwtTokenIssuer : ITokenIssuer, IDisposable
     private readonly RSA privateKey;
     private readonly SigningCredentials credentials;
     private readonly JwtOptions options;
+    private readonly RoleAccessCatalog roleAccess;
 
-    public JwtTokenIssuer(JwtOptions options)
+    public JwtTokenIssuer(JwtOptions options, RoleAccessCatalog roleAccess)
     {
         this.options = options;
+        this.roleAccess = roleAccess;
         privateKey = RSA.Create();
         privateKey.ImportFromPem(File.ReadAllText(options.PrivateKeyPath
             ?? throw new InvalidOperationException("JWT private key path is required.")));
@@ -40,7 +42,7 @@ public sealed class JwtTokenIssuer : ITokenIssuer, IDisposable
             notBefore: now.UtcDateTime,
             expires: now.AddMinutes(options.AccessLifetimeMinutes).UtcDateTime,
             signingCredentials: credentials);
-        jwt.Payload[JwtClaimNames.Permission] = RoleCatalog.GetPermissions(role).ToArray();
+        jwt.Payload[JwtClaimNames.Permission] = roleAccess.GetPermissions(role).ToArray();
         return new JwtSecurityTokenHandler().WriteToken(jwt);
     }
 

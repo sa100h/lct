@@ -1,5 +1,6 @@
 using System.Net;
 using System.Security.Cryptography;
+using System.Security.Cryptography.X509Certificates;
 using System.Text;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
@@ -21,12 +22,22 @@ public sealed class StatusEndpointTests : IClassFixture<WebApplicationFactory<Pr
         var publicPath = Path.Combine(keyDirectory, "public.pem");
         File.WriteAllText(privatePath, rsa.ExportRSAPrivateKeyPem());
         File.WriteAllText(publicPath, rsa.ExportRSAPublicKeyPem());
+        var certificateRequest = new CertificateRequest(
+            "CN=localhost", rsa, HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1);
+        using var certificate = certificateRequest.CreateSelfSigned(
+            DateTimeOffset.UtcNow.AddDays(-1), DateTimeOffset.UtcNow.AddDays(1));
+        var certificatePath = Path.Combine(keyDirectory, "ad.pem");
+        File.WriteAllText(certificatePath, certificate.ExportCertificatePem());
         client = factory.WithWebHostBuilder(builder => builder
             .UseSetting("Migrations:Path", string.Empty)
             .UseSetting("Jwt:Issuer", "lct-test")
             .UseSetting("Jwt:Audience", "lct-test-api")
             .UseSetting("Jwt:PrivateKeyPath", privatePath)
-            .UseSetting("Jwt:PublicKeyPath", publicPath)).CreateClient();
+            .UseSetting("Jwt:PublicKeyPath", publicPath)
+            .UseSetting("Ad:Host", "127.0.0.1")
+            .UseSetting("Ad:Port", "1")
+            .UseSetting("Ad:BindPassword", "test-password")
+            .UseSetting("Ad:CertificatePath", certificatePath)).CreateClient();
     }
 
     [Fact]
