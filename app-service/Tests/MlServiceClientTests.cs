@@ -1,7 +1,7 @@
 using System.Net;
 using System.Text.Json;
 using AppService.Contracts;
-using AppService.Ml;
+using AppService.Services;
 using Xunit;
 
 namespace AppService.Tests;

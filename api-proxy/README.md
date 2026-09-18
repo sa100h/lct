@@ -13,6 +13,13 @@
 
 Настройка: `appsettings.json` → секции `ReverseProxy.Routes` / `Clusters`.
 
+JWT подпись, issuer, audience и срок проверяются перед проксированием
+защищённых `/api/app/**`. Публичны только явные маршруты login, refresh,
+logout и status. `/api/ml/**` пока остаётся открытым для разработки.
+`app-service` повторно проверяет JWT и активность пользователя/семейства.
+`Jwt:Issuer` и `Jwt:Audience` находятся в `appsettings.json` proxy и должны
+соответствовать значениям подписывающего `app-service` для этого API.
+
 ## Dockerfile (многоэтапный)
 
 | Stage | Назначение |
@@ -31,8 +38,9 @@
 | 8080 | HTTP (в продакшене — редирект на HTTPS) |
 | 8443 | HTTPS |
 
-В `docker-compose.yml` наружу маппятся 80/8443; в `docker-compose.deploy.yml` — 80/443
-с реальными сертификатами из `CERTS_PATH` (`/https`, только чтение).
+В обоих Compose-файлах наружу по умолчанию маппятся 80/443;
+внутренний HTTPS-порт контейнера — 8443. В `docker-compose.deploy.yml`
+используются сертификаты из `CERTS_PATH` (`/https`, только чтение).
 
 ## Настройки (`.env`)
 

@@ -1,0 +1,15 @@
+using AppService.Models;
+
+namespace AppService.Services.Domain;
+
+public interface IAuthRepository
+{
+    Task CreateLoginAsync(DirectoryIdentity identity, string role, Guid familyId, Guid tokenId,
+        byte[] tokenHash, DateTimeOffset now, DateTimeOffset expiresAt, CancellationToken cancellationToken);
+    Task<RefreshTokenRecord?> FindRefreshAsync(byte[] tokenHash, CancellationToken cancellationToken);
+    Task<RefreshRotationResult> RotateAsync(DirectoryIdentity identity, string role, RefreshTokenRecord presented,
+        byte[] tokenHash, byte[] nextHash, Guid nextTokenId, DateTimeOffset now, CancellationToken cancellationToken);
+    Task DeactivateAndRevokeAllAsync(Guid userId, DateTimeOffset now, CancellationToken cancellationToken);
+    Task LogoutAsync(byte[] tokenHash, DateTimeOffset now, CancellationToken cancellationToken);
+    Task<bool> IsAccessActiveAsync(Guid userId, Guid familyId, DateTimeOffset now, CancellationToken cancellationToken);
+}

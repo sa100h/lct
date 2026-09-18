@@ -1,14 +1,16 @@
 #!/bin/bash
-set -x
+set -e
+
+: "${AD_BIND_PASSWORD:?AD_BIND_PASSWORD must be set}"
+: "${AD_TLS_HOSTNAME:=dc1.lct.ru}"
 
 # 1. Запускаем init.sh в фоне.
-#    Он выполнит провижининг домена и в конце сделает exec supervisord,
-#    но уже в дочернем процессе, а не заменит наш custom.sh.
+#    Он выполнит провижининг домена и запустит supervisord в дочернем процессе.
 echo "Запуск init.sh в фоне..."
 /init.sh &
 INIT_PID=$!
 
-# 5. Ждём, пока Samba будет готова отвечать по LDAP.
+# 2. Ждём, пока Samba будет готова отвечать по LDAP.
 echo "Ожидание готовности Samba..."
 READY=0
 for i in $(seq 1 60); do
@@ -25,14 +27,10 @@ if [ "$READY" -ne 1 ]; then
   exit 1
 fi
 
-# 2. Ждём появления smb.conf (создаётся во время провижининга).
+# 3. Ждём появления smb.conf (создаётся во время провижининга).
 echo "Ожидание создания smb.conf..."
 SMB_CONF=""
 for i in $(seq 1 90); do
-#   if [ -f /etc/samba/external/smb.conf ]; then
-#     SMB_CONF=/etc/samba/external/smb.conf
-#     break
-#   fi
   if [ -f /etc/samba/smb.conf ]; then
     SMB_CONF=/etc/samba/smb.conf
     break
@@ -46,32 +44,38 @@ if [ -z "$SMB_CONF" ]; then
 fi
 echo "Найден smb.conf: $SMB_CONF"
 
-#sleep 30
-
-# 3. Убеждаемся, что в Samba есть TLS-сертификаты.
-#    Samba генерирует их при провижининге, но на всякий случай проверим.
+# 4. Проверяем самоподписанный сертификат с DNS-именем в SAN.
+#    При необходимости выпускаем новый. Приватный ключ остаётся в томе Samba;
+#    в общий том для app-service передаём только публичный сертификат.
 TLS_DIR="/var/lib/samba/private/tls"
 mkdir -p "$TLS_DIR"
-if [ ! -f "$TLS_DIR/key.pem" ] || [ ! -f "$TLS_DIR/cert.pem" ]; then
-  echo "Сертификаты Samba не найдены — генерируем самоподписанные..."
-  FQDN="dc1.lct.ru"   # ЗАМЕНИТЕ на FQDN вашего контроллера домена
-  openssl req -newkey rsa:2048 -keyout "$TLS_DIR/key.pem" -nodes \
-    -x509 -days 3650 -out "$TLS_DIR/cert.pem" \
-    -subj "/CN=${FQDN}" 2>/dev/null
+if [ ! -f "$TLS_DIR/key.pem" ] || [ ! -f "$TLS_DIR/cert.pem" ] ||
+   ! openssl x509 -in "$TLS_DIR/cert.pem" -noout -checkend 86400 >/dev/null 2>&1 ||
+   ! openssl x509 -in "$TLS_DIR/cert.pem" -noout -ext subjectAltName 2>/dev/null | grep -Fq "DNS:${AD_TLS_HOSTNAME}"; then
+  echo "Создаём самоподписанный LDAPS-сертификат для ${AD_TLS_HOSTNAME}..."
+  openssl req -newkey rsa:3072 -keyout "$TLS_DIR/key.pem" -nodes \
+    -x509 -sha256 -days 365 -out "$TLS_DIR/cert.pem" \
+    -subj "/CN=${AD_TLS_HOSTNAME}" \
+    -addext "subjectAltName=DNS:${AD_TLS_HOSTNAME}" \
+    -addext "extendedKeyUsage=serverAuth" \
+    -addext "keyUsage=digitalSignature,keyEncipherment" \
+    -addext "basicConstraints=critical,CA:FALSE" >/dev/null 2>&1
   cp "$TLS_DIR/cert.pem" "$TLS_DIR/ca.pem"
   chmod 600 "$TLS_DIR/key.pem"
   chmod 644 "$TLS_DIR/cert.pem" "$TLS_DIR/ca.pem"
 fi
+cp "$TLS_DIR/cert.pem" "$TLS_DIR/ca.pem"
+mkdir -p /ad-public-certificates
+cp "$TLS_DIR/cert.pem" /ad-public-certificates/ldaps.pem
+chmod 644 /ad-public-certificates/ldaps.pem
 
-# 4. Добавляем TLS-параметры в smb.conf, если их ещё нет.
-TLS_DIR="/var/lib/samba/private/tls"
+# 5. Обновляем TLS-параметры в smb.conf при каждом запуске.
 
-python3 - "$SMB_CONF" "$TLS_DIR" <<'PYEOF'
+python3 - "$SMB_CONF" <<'PYEOF'
 import re
 import sys
 
 smb_conf = sys.argv[1]
-tls_dir = sys.argv[2]
 
 # --- Резервная копия ---
 import shutil, os
@@ -84,17 +88,18 @@ if not os.path.exists(backup):
 with open(smb_conf, "r", encoding="utf-8") as f:
     content = f.read()
 
-# --- Проверяем, не добавлены ли уже TLS-параметры ---
-if re.search(r'^\s*tls enabled\s*=', content, flags=re.MULTILINE):
-    print("TLS-параметры уже присутствуют в smb.conf — пропускаем")
-    sys.exit(0)
+# --- Удаляем прежние TLS-параметры, включая относительные пути из старой версии ---
+content = re.sub(
+    r'^[ \t]*(?:tls (?:enabled|keyfile|certfile|cafile)|ldap server require strong auth)[ \t]*=.*\n?',
+    '', content, flags=re.MULTILINE)
 
 # --- Формируем блок TLS ---
 tls_block = (
     "    tls enabled = yes\n"
-    "    tls keyfile = tls/key.pem\n"
-    "    tls certfile = tls/cert.pem\n"
-    "    tls cafile = tls/ca.pem\n"
+    "    tls keyfile = /var/lib/samba/private/tls/key.pem\n"
+    "    tls certfile = /var/lib/samba/private/tls/cert.pem\n"
+    "    tls cafile = /var/lib/samba/private/tls/ca.pem\n"
+    "    ldap server require strong auth = yes\n"
 )
 
 # --- Ищем секцию [global] ---
@@ -117,29 +122,34 @@ with open(smb_conf, "w", encoding="utf-8") as f:
 print(f"TLS-параметры добавлены в {smb_conf}")
 PYEOF
 
-# 6. Перезапускаем Samba, чтобы она подхватила smb.conf с TLS.
+# 6. Перезапускаем Samba, чтобы она применила сертификат и настройки TLS.
 echo "Перезапуск Samba для применения TLS..."
 supervisorctl restart samba || true
 sleep 8
 
-# 7. Проверяем, что порт 636 слушается.
-if netstat -tlnp 2>/dev/null | grep -q ":636"; then
-  echo "OK: LDAPS порт 636 слушается"
-else
-  echo "WARNING: порт 636 не слушается — проверьте smb.conf и сертификаты"
+# 7. Проверяем LDAPS-соединение, сертификат и имя сервера.
+LDAPS_READY=0
+for i in $(seq 1 20); do
+  if openssl s_client -brief -connect 127.0.0.1:636 \
+      -servername "$AD_TLS_HOSTNAME" \
+      -CAfile /ad-public-certificates/ldaps.pem \
+      -verify_hostname "$AD_TLS_HOSTNAME" -verify_return_error \
+      </dev/null >/dev/null 2>&1; then
+    LDAPS_READY=1
+    break
+  fi
+  sleep 2
+done
+if [ "$LDAPS_READY" -ne 1 ]; then
+  echo "ОШИБКА: LDAPS не прошёл проверку сертификата и имени сервера"
+  exit 1
 fi
+echo "OK: LDAPS сертификат и имя сервера проверены"
 
-iptables -A INPUT -p tcp --dport 389 -j DROP
+# 8. Создаём недостающие учётные записи и группы.
+#    Вывод пишем в docker logs и /user.log. Скрипт проверяет каждую запись,
+#    поэтому сервисную учётную запись можно добавить без удаления тома AD.
+/usr/local/bin/01-users-groups.sh 2>&1 | tee /user.log
 
-# 8. Выполняем скрипт создания пользователей.
-#    Вывод пишем и в stdout, и в файл, чтобы было видно в docker logs.
-# Запускаем скрипт только если в домене ещё нет пользователя technik.test
-if ! samba-tool user show technik.test >/dev/null 2>&1; then
-  echo "Первый запуск — создаём пользователей..."
-  /usr/local/bin/01-users-groups.sh 2>&1 | tee /user.log
-else
-  echo "Пользователи уже существуют — пропускаем создание"
-fi
-
-# 9. Ждём завершения init.sh (в нём работает supervisord и samba).
+# 9. Ждём завершения init.sh (в нём работает supervisord и Samba).
 wait $INIT_PID

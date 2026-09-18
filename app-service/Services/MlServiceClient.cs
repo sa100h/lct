@@ -2,14 +2,14 @@ using System.Net.Http.Json;
 using System.Text.Json;
 using AppService.Contracts;
 
-namespace AppService.Ml;
+namespace AppService.Services;
 
 /// <summary>
 /// Thin HTTP client for the ml-service (FastAPI). Kept transport-agnostic so it
 /// can be pointed at http://ml-service:8000 in Docker and http://localhost:8000
 /// for local dev via the "MlService" config section.
 /// </summary>
-public sealed class MlServiceClient(HttpClient http)
+public sealed class MlServiceClient(HttpClient http) : IMlServiceClient
 {
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web)
     {
@@ -59,39 +59,3 @@ public sealed class MlServiceClient(HttpClient http)
     }
 }
 
-// Wire-format DTOs (snake_case via JsonOptions, matching FastAPI).
-internal sealed record MlPredictRequest(
-    string Category,
-    string SubjectId,
-    Dictionary<string, double> CurrentFeatures,
-    int HorizonHours);
-
-public sealed class PredictionDto
-{
-    public string Category { get; init; } = string.Empty;
-    public string SubjectId { get; init; } = string.Empty;
-    public double RiskScore { get; init; }
-    public double Probability { get; init; }
-    public bool PredictedLabel { get; init; }
-    public int HorizonHours { get; init; }
-    public DateTime PredictedAt { get; init; }
-    public string ModelVersion { get; init; } = string.Empty;
-    public Dictionary<string, double>? FeatureImportance { get; init; }
-}
-
-public sealed class StatusDto
-{
-    public string Service { get; init; } = string.Empty;
-    public string State { get; init; } = string.Empty;
-    public Dictionary<string, MlModelStatus>? Models { get; init; }
-    public DateTime Now { get; init; }
-}
-
-public sealed class MlModelStatus
-{
-    public string Category { get; init; } = string.Empty;
-    public string State { get; init; } = string.Empty;
-    public string ModelVersion { get; init; } = string.Empty;
-    public DateTime? TrainedAt { get; init; }
-    public Dictionary<string, JsonElement>? Metrics { get; init; }
-}

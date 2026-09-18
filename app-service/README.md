@@ -7,19 +7,21 @@
 
 | Путь | Назначение |
 |------|-----------|
-| `Program.cs` | composition root: DI, observability (shared), endpoints |
-| `Ml/MlServiceClient.cs` | HTTP-клиент к ml-service (`/predict`, `/status`) |
-| `Contracts/PredictionContracts.cs` | DTO прогнозов (совпадает со схемой ml-service) |
-| `Contracts/ServiceStatusResponse.cs` | DTO статуса |
-| `Tests/MlServiceClientTests.cs`, `Tests/StatusEndpointTests.cs` | unit-тесты (запускаются в CI) |
+| `Controllers/` | MVC-контроллеры для авторизации, статуса, прогноза и примера permission policy |
+| `Contracts/` | API DTO для авторизации, статуса и прогнозов |
+| `Services/Domain/` | сценарии авторизации, роли, permissions и интерфейсы портов |
+| `Services/` | JWT, заглушка AD и HTTP-клиент ml-service |
+| `Data/Repositories/` | Npgsql-репозиторий пользователей и refresh token |
+| `Models/` | внутренние модели авторизации |
+| `Extensions/` | регистрация зависимостей, политики доступа и запуск миграций |
 
 ## Данные
 
 - БД: `app_db` на postgres:18. Пользователь `app_service` создаётся
   `postgres-db/init/02-init-create-user.sh`.
 - Миграции применяются при старте контейнером из `./postgres-db/migrations`
-  (монтируется в `/migrations`): `001_initialize.sql`, `002_lct_domain.sql`
-  (таблицы equipment, alarm_events, predictions, maintenance_requests).
+  (монтируется в `/migrations`): `001_initialize.sql`, `002_lct_domain.sql`,
+  `003_auth.sql` (таблицы `users` и `refresh_tokens`).
   Механика — `shared/DatabaseMigration/PostgresMigrator.cs`.
 
 ## Настройки
@@ -30,10 +32,27 @@
 | `Migrations__Path` | `/migrations/app_db` | каталог SQL-миграций |
 | `MlService__BaseUrl` | `http://ml-service:8000` | адрес ML-сервиса |
 | `Observability__OtlpEndpoint` | `""` | OTLP-коллектор |
+| `Jwt:Issuer`, `Jwt:Audience` | `appsettings.json` | область доверия access JWT; proxy задаёт те же значения в своём `appsettings.json` |
+| `Jwt__PrivateKeyPath`, `Jwt__PublicKeyPath` | Compose | приватный и публичный PEM ключи |
+| `Ad__Host`, `Ad__CertificatePath` | Compose | параметры будущего LDAPS адаптера |
+| `AdGroups:*` | `appsettings.json` | соответствие AD групп четырём ролям |
 
 ## Порты
 
 `8080` — внутренний, наружу выходит только через api-proxy (`/api/app/**`).
+
+## Авторизация
+
+`POST /auth/login`, `/auth/refresh`, `/auth/logout` работают с access JWT на
+5 минут и одноразовым refresh в `HttpOnly`, `Secure`, `SameSite=Strict` cookie.
+Пока LDAP адаптер не реализован, login и refresh не выдают токены и отвечают
+`503`. Для последующей интеграции предусмотрен интерфейс `IAdIdentityProvider`.
+
+Роли и permissions задаются в `Services/Domain/RoleCatalog.cs`. Пока там только
+демонстрационное `demo.access` для всех четырёх ролей. Его использование видно
+на `GET /authz/demo`; бизнес матрицу следует заполнить до защиты реальных
+ручек отдельными permissions. `IDistrictResourceAccess<TResource>` — контракт
+для последующей проверки доступа диспетчера к району.
 
 ## Связи
 
@@ -45,5 +64,11 @@
 ## Локальный запуск
 
 ```bash
-dotnet run --project app-service   # MlService__BaseUrl=http://localhost:8000 по умолчанию
+pwsh ./scripts/generate-jwt-keys.ps1   # один раз, если ключей ещё нет
+$env:Jwt__PublicKeyPath = (Resolve-Path .keys/jwt-public.pem).Path
+$env:Jwt__PrivateKeyPath = (Resolve-Path .keys/jwt-private.pem).Path
+dotnet run --project app-service
 ```
+
+Для прямого запуска также нужна доступная `app_db` и корректная строка
+`ConnectionStrings:AppDb`; в Compose пути ключей и БД задаются автоматически.

@@ -11,14 +11,3 @@ public sealed record PredictRequest(
     Dictionary<string, double>? CurrentFeatures = null,
     int HorizonHours = 24);
 
-/// <summary>Stored/returned prediction record.</summary>
-public sealed record PredictionResponse(
-    Guid Id,
-    string Category,
-    string SubjectId,
-    double RiskScore,
-    bool PredictedLabel,
-    int HorizonHours,
-    string ModelVersion,
-    DateTime PredictedAt,
-    Dictionary<string, double>? FeatureImportance);

@@ -1,5 +1,9 @@
 **/.git
 **/.env
+**/.keys
+**/certs
+.keys
+certs
 **/.vs
 **/.vscode
 **/bin

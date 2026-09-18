@@ -106,8 +106,10 @@ services:
       Kestrel__Endpoints__Https__Certificate__Path: /https/fullchain.pem
       Kestrel__Endpoints__Https__Certificate__KeyPath: /https/privkey.pem
       Observability__OtlpEndpoint: ""
+      Jwt__PublicKeyPath: /run/secrets/jwt-public.pem
     volumes:
       - ${CERTS_PATH:-./certs}:/https:ro
+      - ${JWT_KEYS_PATH:-./.keys}/jwt-public.pem:/run/secrets/jwt-public.pem:ro
     read_only: true
     tmpfs: ["/tmp:size=50M"]
     cap_drop: [ALL]
@@ -126,8 +128,16 @@ services:
       Migrations__Path: /migrations/app_db
       MlService__BaseUrl: http://ml-service:8000
       Observability__OtlpEndpoint: ""
+      Jwt__PublicKeyPath: /run/secrets/jwt-public.pem
+      Jwt__PrivateKeyPath: /run/secrets/jwt-private.pem
+      Jwt__AccessLifetimeMinutes: "5"
+      Jwt__RefreshLifetimeDays: "7"
+      AuthCookie__Name: ${AUTH_REFRESH_COOKIE_NAME:-lct_refresh}
+      AuthCookie__Path: ${AUTH_REFRESH_COOKIE_PATH:-/api/app/auth}
     volumes:
       - ./postgres-db/migrations:/migrations:ro
+      - ${JWT_KEYS_PATH:-./.keys}/jwt-public.pem:/run/secrets/jwt-public.pem:ro
+      - ${JWT_KEYS_PATH:-./.keys}/jwt-private.pem:/run/secrets/jwt-private.pem:ro
     read_only: true
     tmpfs: ["/tmp:size=50M"]
     cap_drop: [ALL]
