@@ -38,7 +38,7 @@ public sealed class AuthSessionService(
         var familyId = Guid.NewGuid();
         var refresh = tokens.CreateRefresh();
         var access = tokens.IssueAccess(identity.Id, familyId, role, now);
-        await store.CreateLoginAsync(identity, role, familyId, Guid.NewGuid(),
+        await store.CreateLoginAsync(identity, familyId, Guid.NewGuid(),
             tokens.HashRefresh(refresh), now, expiresAt, cancellationToken);
         return AuthResult.Success(access, refresh, expiresAt);
     }
@@ -85,7 +85,7 @@ public sealed class AuthSessionService(
         var nextRefresh = tokens.CreateRefresh();
         var nextHash = tokens.HashRefresh(nextRefresh);
         var access = tokens.IssueAccess(identity.Id, presented.FamilyId, role, now);
-        var rotation = await store.RotateAsync(identity, role, presented, presentedHash,
+        var rotation = await store.RotateAsync(identity, presented, presentedHash,
             nextHash, Guid.NewGuid(), now, cancellationToken);
         return rotation == RefreshRotationResult.Success
             ? AuthResult.Success(access, nextRefresh, presented.ExpiresAt)
