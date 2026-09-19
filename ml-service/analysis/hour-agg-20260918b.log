@@ -1,0 +1,11 @@
+  [exclude] 847 2021-05-01..2021-06-30 year=2021: dropped 81,403 channel-day-hours
+2021: raw=53,698,948 invalid_dropped=676,095 bad_hour=0 hour_agg_rows=2,590,578 -> 20.1MB  (255s)
+HOUR AGG ALL DONE
+2022: raw=43,483,149 invalid_dropped=1,185 bad_hour=0 hour_agg_rows=2,056,972 -> 20.2MB  (193s)
+HOUR AGG ALL DONE
+2023: raw=31,937,125 invalid_dropped=1,959 bad_hour=0 hour_agg_rows=1,843,717 -> 17.8MB  (148s)
+HOUR AGG ALL DONE
+2024: raw=49,023,883 invalid_dropped=868 bad_hour=0 hour_agg_rows=2,008,715 -> 19.9MB  (209s)
+HOUR AGG ALL DONE
+2025: raw=55,541,797 invalid_dropped=866 bad_hour=0 hour_agg_rows=2,141,815 -> 20.9MB  (234s)
+HOUR AGG ALL DONE

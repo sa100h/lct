@@ -5,7 +5,11 @@ One row per (channel, day) inside each channel's observed span per year:
     (events, alarms, numeric stats, state counts, activity density, days since
     last activity/alarm, state diversity) — no same-day information.
     Plus: calendar seasonality (month sin/cos, day of week) and static
-    per-channel cabinet/object codes.
+    per-channel cabinet/object codes, and the intra-day hour profile
+    (e7h_*/a7h_*: trailing 7d per-hour event/alarm counts from
+    agg-hour-<year>.parquet; night_share7/peak_share7: shares of 00-05
+    and 08-20 hours in the same window) — all strictly-before-t, same
+    anti-leak horizon as the day-level features.
   - label: 1 if on day t the channel emits an alarm (тревожение=true) or any
     category-critical state (per vocab.json "critical").
 
@@ -45,9 +49,9 @@ CATS = {
 }
 
 NEG_RATIO = 3
-W7, W30 = 7, 30
+W7, W14, W30 = 7, 14, 30
 N_STATES = len(STATES)
-FLUSH_ROWS = 800_000  # write parquet chunks, never one giant in-RAM frame
+FLUSH_ROWS = 300_000  # write parquet chunks, never one giant in-RAM frame
 
 
 def cat_channels(subs, sen: pd.DataFrame) -> set:
@@ -159,14 +163,22 @@ def build_category(cat: str, sen: pd.DataFrame, years: list[int],
     obj_enc = sen_ch["ид_объект"].to_dict()
     t0 = time.time()
 
-    feat_cols = (
+    _feat_cols = (
         ["e7", "a7", "e30", "a30", "n7", "m7", "s7", "n30", "m30", "s30",
          "act7", "act30", "ar7", "ar30", "since_act", "since_alar", "div30"]
         + (["rep_gap"] if new_incident else [])
         + ["month_sin", "month_cos", "dow", "cabinet", "object_code"]
         + [f"t7_{i}" for i in range(N_STATES)]
         + [f"t30_{i}" for i in range(N_STATES)]
+        + ["e14", "a14", "n14", "m14", "s14", "act14", "ar14"]
+        + [f"tr7_{i}" for i in range(N_STATES)]
+        + [f"tr14_{i}" for i in range(N_STATES)]
+        + ["ch_age"]
+        + [f"e7h_{h}" for h in range(24)]
+        + [f"a7h_{h}" for h in range(24)]
+        + ["night_share7", "peak_share7"]
     )
+    feat_cols = _feat_cols
     n_head = 18 if new_incident else 17
 
     tmp = FEAT / f".tmp-{cat}"
@@ -182,6 +194,27 @@ def build_category(cat: str, sen: pd.DataFrame, years: list[int],
             continue
         df = pd.read_parquet(f, columns=["channel", "day", *base_cols, *s_cols])
         df = df[df["channel"].isin(chset)].sort_values(["channel", "day"])
+        # Intra-day hour records for this year: channel -> ndarray(n,4)
+        # [day_ord, hour, n_events, n_alarm]. Used to build the per-hour
+        # trailing-7d features; EXCLUDE_SPANS/filters mirror the day agg.
+        hour_by_chan: dict[str, np.ndarray] = {}
+        hfile = AGG / f"agg-hour-{year}.parquet"
+        if hfile.exists():
+            h_df = pd.read_parquet(hfile, columns=["channel", "day", "hour", "n_events", "n_alarm"])
+            h_df = h_df[h_df["channel"].isin(chset)]
+            if len(h_df):
+                h_ord = (pd.to_datetime(h_df["day"], format="%Y-%m-%d")
+                         .astype("int64").to_numpy() // 10**9)
+                h_df = h_df.assign(_ord=h_ord).sort_values("channel")
+                for ch, grp in h_df.groupby("channel", sort=False):
+                    hour_by_chan[str(ch)] = np.column_stack((
+                        grp["_ord"], grp["hour"], grp["n_events"], grp["n_alarm"],
+                    )).astype(np.int32)
+                print(f"  {cat} {year}: hour-agg {len(h_df):,} rows, "
+                      f"{len(hour_by_chan):,} channels", flush=True)
+            del h_df
+        else:
+            print(f"  [warn] missing {hfile} — hour features will be zero", flush=True)
         for c in ("num_min", "num_max"):
             df[c] = df[c].fillna(0.0)
         mat = df[base_cols + s_cols].to_numpy(np.float32)
@@ -216,17 +249,23 @@ def build_category(cat: str, sen: pd.DataFrame, years: list[int],
 
             e7, a7 = trail_sum(ev, W7), trail_sum(al, W7)
             e30, a30 = trail_sum(ev, W30), trail_sum(al, W30)
+            e14, a14 = trail_sum(ev, W14), trail_sum(al, W14)
             cn7 = trail_sum(nn, W7); cs7 = trail_sum(nsum, W7); c27 = trail_sum(nsq, W7)
+            cn14 = trail_sum(nn, W14); cs14 = trail_sum(nsum, W14); c214 = trail_sum(nsq, W14)
             cn30 = trail_sum(nn, W30); cs30 = trail_sum(nsum, W30); c230 = trail_sum(nsq, W30)
             m7 = np.where(cn7 > 0, cs7 / np.maximum(cn7, 1), 0.0)
             s7 = np.sqrt(np.clip(c27 / np.maximum(cn7, 1) - m7**2, 0, None))
+            m14 = np.where(cn14 > 0, cs14 / np.maximum(cn14, 1), 0.0)
+            s14 = np.sqrt(np.clip(c214 / np.maximum(cn14, 1) - m14**2, 0, None))
             m30 = np.where(cn30 > 0, cs30 / np.maximum(cn30, 1), 0.0)
             s30 = np.sqrt(np.clip(c230 / np.maximum(cn30, 1) - m30**2, 0, None))
 
             active = ev > 0
             act7 = trail_sum(active.astype(np.float32), W7) / W7
+            act14 = trail_sum(active.astype(np.float32), W14) / W14
             act30 = trail_sum(active.astype(np.float32), W30) / W30
             ar7 = a7 / np.maximum(e7, 1)
+            ar14 = a14 / np.maximum(e14, 1)
             ar30 = a30 / np.maximum(e30, 1)
             since_act = since_last(active.astype(np.int8)).astype(np.float32)
             since_alar = since_last(al).astype(np.float32)
@@ -259,6 +298,32 @@ def build_category(cat: str, sen: pd.DataFrame, years: list[int],
             st30 = np.stack([trail_sum(full[:, i], W30) for i in range(N_STATES)], axis=1)
             div30 = (st30 > 0).sum(axis=1).astype(np.float32)
 
+            # state transition counts: how many days within the window the
+            # state BEGAN (day t-1 was not in that state, day t is). A bursty
+            # state (many on/off flips) is a stronger anomaly signal than the
+            # same total number of days. Same strict-before-t horizon via
+            # trail_sum on the transition indicator.
+            tr7 = np.empty((span, N_STATES), np.float32)
+            tr14 = np.empty((span, N_STATES), np.float32)
+            for i in range(N_STATES):
+                x = full[:, i] > 0
+                on = x.copy()
+                on[1:] = x[1:] & ~x[:-1]
+                onf = on.astype(np.float32)
+                tr7[:, i] = trail_sum(onf, W7)
+                tr14[:, i] = trail_sum(onf, W14)
+
+            # channel age: calendar days since the channel's first report in
+            # the data (as of end of t-1). Young channels have unreliable
+            # state trails (fire detector rollout 1977->6830 over 8 years),
+            # so the model can down-weight them. dd is the reported-day
+            # positions, NOT the full span — first report = dd[0], strictly-
+            # before-t via grid-1.
+            first_dd = dd[0]
+            age = np.full(span, 999, np.float32)
+            had = grid - 1 >= first_dd
+            age[had] = np.minimum(np.maximum((grid[had] - 1 - first_dd), 0), 999)
+
             feats = np.empty((span, len(feat_cols)), np.float32)
             feats[:, 0:17] = np.stack(
                 [e7, a7, e30, a30, cn7, m7, s7, cn30, m30, s30,
@@ -283,7 +348,47 @@ def build_category(cat: str, sen: pd.DataFrame, years: list[int],
             feats[:, extra_start + 4] = obj_enc.get(str(ch_id), -1)
             st_start = extra_start + 5
             feats[:, st_start:st_start + N_STATES] = st7
-            feats[:, st_start + N_STATES:] = st30
+            feats[:, st_start + N_STATES:st_start + 2 * N_STATES] = st30
+            w14_start = st_start + 2 * N_STATES
+            feats[:, w14_start:w14_start + 7] = np.stack(
+                [e14, a14, cn14, m14, s14, act14, ar14], axis=1,
+            ).astype(np.float32)
+            tr_start = w14_start + 7
+            feats[:, tr_start:tr_start + N_STATES] = tr7
+            feats[:, tr_start + N_STATES:tr_start + 2 * N_STATES] = tr14
+            feats[:, tr_start + 2 * N_STATES] = age
+
+            # Intra-day hour profile: trailing 7d per-hour event/alarm counts
+            # (strictly before t). Sparse (day,hour) records are scattered into
+            # a span×24 grid, then trail_sum per hour. night/peak shares are
+            # the 00:00-05:00 and 08:00-20:00 shares of the 7d event total.
+            ho_start = tr_start + 2 * N_STATES + 1
+            harr = hour_by_chan.get(str(ch_id))
+            if harr is not None and len(harr):
+                d_idx = harr[:, 0] - dd[0]
+                ok = (d_idx >= 0) & (d_idx < span) & (harr[:, 1] >= 0) & (harr[:, 1] < 24)
+                d_idx, hh = d_idx[ok], harr[ok, 1]
+                hour_ev = np.zeros((span, 24), np.float32)
+                hour_al = np.zeros((span, 24), np.float32)
+                np.add.at(hour_ev, (d_idx, hh), harr[ok, 2].astype(np.float32))
+                np.add.at(hour_al, (d_idx, hh), harr[ok, 3].astype(np.float32))
+                e7h = np.empty((span, 24), np.float32)
+                a7h = np.empty((span, 24), np.float32)
+                for h in range(24):
+                    e7h[:, h] = trail_sum(hour_ev[:, h], W7)
+                    a7h[:, h] = trail_sum(hour_al[:, h], W7)
+                ev_tot = np.maximum(e7h.sum(axis=1), 1.0)
+                night_share7 = e7h[:, 0:6].sum(axis=1) / ev_tot
+                peak_share7 = e7h[:, 8:20].sum(axis=1) / ev_tot
+            else:
+                e7h = np.zeros((span, 24), np.float32)
+                a7h = np.zeros((span, 24), np.float32)
+                night_share7 = np.zeros(span, np.float32)
+                peak_share7 = np.zeros(span, np.float32)
+            feats[:, ho_start:ho_start + 24] = e7h
+            feats[:, ho_start + 24:ho_start + 48] = a7h
+            feats[:, ho_start + 48] = night_share7
+            feats[:, ho_start + 49] = peak_share7
 
             # emit rows: reported days only, after warmup; downsample
             # negatives (per-segment, keeps RAM low). Gap days are NOT
@@ -310,15 +415,20 @@ def build_category(cat: str, sen: pd.DataFrame, years: list[int],
     writer.flush()
     del writer
 
-    # merge chunk parts into the final single parquet
+    # merge chunk parts into the final single parquet. Use a streaming
+    # ParquetWriter (append parts one-by-one, no in-RAM concat): the dense
+    # feature matrix at 135 cols is ~1.3GB for sensor-failure and an
+    # in-RAM concat_tables + to_pandas frame overflowed 3.8GB (SIGKILL 137).
     parts = sorted(tmp.glob("part-*.parquet"))
     if not parts:
         shutil.rmtree(tmp, ignore_errors=True)
         print(f"[{cat}] EMPTY", flush=True)
         return
-    table = concat_tables([pq.read_table(str(p)) for p in parts])
     out = FEAT / f"features-{cat}.parquet"
-    pq.write_table(table, str(out), compression="zstd")
+    first = pq.read_table(str(parts[0]))
+    with pq.ParquetWriter(str(out), first.schema, compression="zstd") as w:
+        for p in parts:
+            w.write_table(pq.read_table(str(p)))
     shutil.rmtree(tmp, ignore_errors=True)
 
     # stats via a slim column scan (never holds the full frame in RAM)

@@ -38,7 +38,7 @@ from app.ingest.aggregate import STATES
 FEAT = Path("/home/junai/lct/ml-data/features")
 VOCAB = json.loads(Path("/home/junai/lct/ml-data/vocab.json").read_text(encoding="utf-8"))
 TEST_YEAR = 2026
-MAX_TRAIN = 1_000_000
+MAX_TRAIN = 600_000
 
 N_STATES = 26
 
@@ -49,7 +49,7 @@ def feat_names(cat: str) -> list[str]:
     return [c for c in pf.schema_arrow.names if c not in {"channel", "day", "year", "label"}]
 
 
-def load_split(cat: str):
+def load_split(cat: str, test_sample: int = 30_000):
     f = FEAT / f"features-{cat}.parquet"
     pf = pq.ParquetFile(f)
     names = feat_names(cat)
@@ -65,6 +65,11 @@ def load_split(cat: str):
     keep_idx = rng.choice(tr_idx, size=min(MAX_TRAIN, len(tr_idx)), replace=False)
     keep = np.zeros(n, dtype=bool)
     keep[keep_idx] = True
+    # test set: random subsample (3.9GB box cannot stream all of 2026 with 185 cols)
+    te_idx = np.flatnonzero(te_global)
+    te_keep_idx = rng.choice(te_idx, size=min(test_sample, len(te_idx)), replace=False)
+    te_keep = np.zeros(n, dtype=bool)
+    te_keep[te_keep_idx] = True
 
     tr_parts, te_parts, tr_y_parts, te_y_parts = [], [], [], []
     pos = 0
@@ -76,7 +81,7 @@ def load_split(cat: str):
         yr = rg.column("year").to_numpy()
         lab = rg.column("label").to_numpy().astype(np.int8)
         x = np.column_stack([rg.column(c).to_numpy() for c in names]).astype(np.float32)
-        mte = yr == TEST_YEAR
+        mte = te_keep[sl]
         if mte.any():
             te_parts.append(x[mte]); te_y_parts.append(lab[mte])
         mtr = keep[sl]
@@ -93,7 +98,7 @@ def fit_eval(Xtr, ytr, Xte, yte, colmask: np.ndarray, tag: str) -> dict:
     t0 = time.time()
     m = HistGradientBoostingClassifier(
         max_iter=300, learning_rate=0.08, max_leaf_nodes=31,
-        l2_regularization=1.0, random_state=42,
+        l2_regularization=1.0, class_weight="balanced", random_state=42,
     ).fit(Xtr_v, ytr)
     proba = m.predict_proba(Xte_v)[:, 1]
     pred = (proba >= 0.5).astype(int)

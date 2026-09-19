@@ -37,7 +37,11 @@ from app.models.registry import get_registry
 logger = logging.getLogger(__name__)
 
 FEAT_DIR = Path("/home/junai/lct/ml-data/features")
-MAX_TRAIN_ROWS = 2_000_000
+# train buffer in float32 (HGB fits on float32 directly): the 134-feature
+# tables overflowed the 3.8GB box via a fit-time float64 copy (SIGKILL 137).
+# 1.0M rows keeps the fit-time peak ~1.5GB — sensor-failure's 2.46M-row table
+# needs the headroom; the sample is random so 1.0M vs 1.2M rows changes nothing.
+MAX_TRAIN_ROWS = 1_000_000
 MAX_ROW_GROUP = 2_000_000
 META_COLS = {"channel", "day", "year", "label"}
 
@@ -93,8 +97,16 @@ def _train_real(category: str, test_year: int) -> dict:
     if max_rgf > MAX_ROW_GROUP:
         raise MemoryError(f"Row group too big to stream ({max_rgf:,} rows)")
 
-    # Pass 1 (cheap: one int32 column): global keep/test masks.
-    years = pf.read(columns=["year"]).column(0).to_numpy()
+    # Pass 1: stream the year column RG by RG (a full pf.read materializes the
+    # 1.32GB feature table just for one int32 column — unnecessary on a 3.8GB
+    # box and the proximate cause of the 134-col OOM kills).
+    year_parts: list[np.ndarray] = []
+    for i in range(n_rgs):
+        year_parts.append(
+            pf.read_row_group(i, columns=["year"]).column(0).to_numpy()
+        )
+    years = np.concatenate(year_parts)
+    del year_parts
     n = len(years)
     is_tr_global = years < test_year
     is_te_global = years == test_year
@@ -107,11 +119,22 @@ def _train_real(category: str, test_year: int) -> dict:
     keep = np.zeros(n, dtype=bool)
     keep[is_tr_global] = rng.random(tr_count) < subsample
 
-    # Pass 2: stream row groups; materialize one at a time.
-    tr_parts: list[np.ndarray] = []
-    tr_y_parts: list[np.ndarray] = []
+    n_keep = int(keep.sum())
+    n_feat = len(names)
+
+    # fresh handle: the pass-1 file object still pins 1.3GB of buffers
+    pf.close()
+    pf = pq.ParquetFile(path)
+    n_rgs = pf.metadata.num_row_groups
+
+    # Pass 2: stream row groups; fill ONE preallocated float32 buffer.
+    # (vstack of per-RG float64 frames kept two full-size copies in RAM and
+    # OOM-killed the 134-col rebuild; prealloc + float32 halves both.)
+    Xtr_buf = np.empty((n_keep, n_feat), dtype=np.float32)
+    ytr_buf = np.empty(n_keep, dtype=np.int64)
     te_parts: list[np.ndarray] = []
     te_y_parts: list[np.ndarray] = []
+    cur = 0
     pos = 0
     for i in range(n_rgs):
         rg = pf.read_row_group(i, columns=load_cols)
@@ -121,28 +144,34 @@ def _train_real(category: str, test_year: int) -> dict:
 
         kmask = keep[sl]
         if kmask.any():
-            sub = rg.filter(pa.array(kmask))
-            tr_parts.append(
-                np.column_stack([sub.column(n).to_numpy().astype(np.float64) for n in names])
-            )
-            tr_y_parts.append(sub.column("label").to_numpy().astype(np.int64))
-            del sub
+            ksub = rg.filter(pa.array(kmask))
+            k = ksub.num_rows
+            part = np.empty((k, n_feat), dtype=np.float32)
+            for j, n in enumerate(names):
+                part[:, j] = ksub.column(n).to_numpy()
+            Xtr_buf[cur:cur + k] = part
+            ytr_buf[cur:cur + k] = ksub.column("label").to_numpy()
+            cur += k
+            del part, ksub
         tmask = is_te_global[sl]
         if tmask.any():
             sub = rg.filter(pa.array(tmask))
             te_parts.append(
-                np.column_stack([sub.column(n).to_numpy().astype(np.float64) for n in names])
+                np.empty((sub.num_rows, n_feat), dtype=np.float32)
             )
+            tp = te_parts[-1]
+            for j, n in enumerate(names):
+                tp[:, j] = sub.column(n).to_numpy()
             te_y_parts.append(sub.column("label").to_numpy().astype(np.int64))
             del sub
         del rg
     del years, keep
-
-    Xtr = np.vstack(tr_parts)
-    ytr = np.concatenate(tr_y_parts)
-    Xte = np.vstack(te_parts)
-    yte = np.concatenate(te_y_parts)
-    del tr_parts, tr_y_parts, te_parts, te_y_parts
+    Xtr_buf = Xtr_buf[:cur]
+    ytr = ytr_buf[:cur]
+    del ytr_buf
+    Xte = np.vstack(te_parts) if te_parts else np.empty((0, n_feat), dtype=np.float32)
+    yte = np.concatenate(te_y_parts) if te_y_parts else np.empty(0, dtype=np.int64)
+    del te_parts, te_y_parts
 
     model = HistGradientBoostingClassifier(
         max_iter=300,
@@ -152,7 +181,10 @@ def _train_real(category: str, test_year: int) -> dict:
         class_weight="balanced",
         random_state=42,
     )
-    model.fit(Xtr, ytr)
+    # fit directly on float32 (HGB accepts it): the previous
+    # .astype(float64) fit-time copy alone was a 1.3-1.6GB spike on the
+    # 3.8GB box and OOM-killed infrastructure-wear mid-fit.
+    model.fit(Xtr_buf, ytr)
 
     proba = model.predict_proba(Xte)[:, 1]
     pred = (proba >= 0.5).astype(int)

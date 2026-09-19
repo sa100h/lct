@@ -1,0 +1,3 @@
+2019: raw=20,993,328 invalid_dropped=915 bad_hour=0 hour_agg_rows=1,791,751 -> 16.2MB  (123s)
+2020: raw=28,172,398 invalid_dropped=1,006,311 bad_hour=0 hour_agg_rows=2,149,203 -> 17.5MB  (156s)
+  [exclude] 847 2021-05-01..2021-06-30 year=2021: dropped 81,403 channel-day-hours
