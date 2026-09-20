@@ -31,6 +31,7 @@ class ModelState:
     model_version: str = "none"
     trained_at: datetime | None = None
     metrics: dict = field(default_factory=dict)
+    engine: str = ""
 
 
 def _load_meta(category: str) -> dict:
@@ -45,13 +46,26 @@ class ModelRegistry:
         self.root = root
         self.root.mkdir(parents=True, exist_ok=True)
 
-    def save(self, category: str, model, feature_names: list[str], metrics: dict, version: str | None = None) -> None:
+    def save(self, category: str, model, feature_names: list[str], metrics: dict,
+             version: str | None = None, engine: str | None = None) -> None:
         cat_dir = self.root / category
         cat_dir.mkdir(parents=True, exist_ok=True)
         version = version or f"v-{datetime.now(timezone.utc):%Y%m%d-%H%M%S}"
-        joblib.dump(model, cat_dir / "model.joblib")
+        is_lgbm = hasattr(model, "save_model")  # lgb.Booster artifact
+        if is_lgbm:
+            model.save_model(cat_dir / "model.lgb")
+            artifact = "model.lgb"
+        else:
+            joblib.dump(model, cat_dir / "model.joblib")
+            artifact = "model.joblib"
+        # drop any stale artifact of the other engine so load() is unambiguous
+        stale = cat_dir / ("model.joblib" if is_lgbm else "model.lgb")
+        if stale.exists():
+            stale.unlink()
         meta = {
             "version": version,
+            "engine": engine or (artifact if not is_lgbm else "lightgbm"),
+            "artifact": artifact,
             "trained_at": datetime.now(timezone.utc).isoformat(),
             "feature_names": feature_names,
             "metrics": metrics,
@@ -59,9 +73,17 @@ class ModelRegistry:
         (cat_dir / "meta.json").write_text(json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8")
 
     def load(self, category: str):
-        model_path = self.root / category / "model.joblib"
+        meta = _load_meta(category)
+        artifact = meta.get("artifact") or (
+            "model.lgb" if (self.root / category / "model.lgb").exists() else "model.joblib"
+        )
+        model_path = self.root / category / artifact
         if not model_path.exists():
             raise KeyError(f"No trained model for category '{category}'")
+        if artifact == "model.lgb":
+            import lightgbm as lgb
+
+            return lgb.Booster(model_file=str(model_path))
         return joblib.load(model_path)
 
     def feature_names(self, category: str) -> list[str]:
@@ -86,6 +108,7 @@ class ModelRegistry:
             model_version=meta.get("version", "unknown"),
             trained_at=datetime.fromisoformat(trained_at) if trained_at else None,
             metrics=meta.get("metrics", {}),
+            engine=meta.get("engine", ""),
         )
 
 

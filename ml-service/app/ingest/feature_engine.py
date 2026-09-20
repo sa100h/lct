@@ -431,11 +431,19 @@ def build_category(cat: str, sen: pd.DataFrame, years: list[int],
             w.write_table(pq.read_table(str(p)))
     shutil.rmtree(tmp, ignore_errors=True)
 
+    # 11 canonical lag columns (app/ingest/lag_features.py — the SAME module
+    # used at serve time). Rewrites features-<cat>.parquet with the extra
+    # columns; idempotent.
+    from app.ingest.lag_features import add_lag_features
+
+    add_lag_features(out)
+
     # stats via a slim column scan (never holds the full frame in RAM)
     summary = pq.read_table(str(out), columns=["year", "label"]).to_pandas()
+    ncol = len(pq.read_schema(str(out)).names) - 4  # minus channel/day/year/label
     vc = summary.groupby("year")["label"].agg(["count", "mean"])
     npos = int(summary["label"].sum())
-    print(f"[{cat}] rows={len(summary):,} pos={npos:,} "
+    print(f"[{cat}] rows={len(summary):,} cols={ncol} pos={npos:,} "
           f"pos_rate={summary['label'].mean():.4f} -> {out.stat().st_size/1e6:.1f}MB "
           f"({time.time()-t0:.0f}s)\n{vc.to_string()}", flush=True)
 

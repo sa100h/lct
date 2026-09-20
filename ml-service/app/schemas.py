@@ -50,6 +50,7 @@ class StatusResponse(BaseModel):
     service: str
     state: str
     models: dict[str, dict]
+    lags: dict[str, dict] = Field(default_factory=dict, description="Observation-store freshness per category.")
     now: datetime
 
 

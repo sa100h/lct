@@ -71,3 +71,21 @@ def test_features_schema_consistency():
         names = features_for(cat.value)
         assert len(names) == 6
         assert len(set(names)) == 6
+
+
+def test_models_have_lag_features_and_load():
+    """T7: persisted models carry the 11 lag feature names and their artifact loads."""
+    from app.ingest.lag_features import LAG_FEATURES
+    from app.models.registry import get_registry
+
+    _ensure_models()
+    registry = get_registry()
+    for cat in Category:
+        names = registry.feature_names(cat.value)
+        assert len(names) >= 195, f"{cat.value}: {len(names)} features"
+        missing = [k for k in LAG_FEATURES if k not in names]
+        assert not missing, f"{cat.value}: lag names missing from feature list: {missing}"
+        model = registry.load(cat.value)
+        assert model is not None
+        assert hasattr(model, "predict") or hasattr(model, "predict_proba")
+
