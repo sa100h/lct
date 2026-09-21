@@ -25,8 +25,12 @@ from pathlib import Path
 
 import numpy as np
 import lightgbm as lgb
+from sklearn.isotonic import IsotonicRegression
+from sklearn.linear_model import LogisticRegressionCV
 from sklearn.metrics import (
     average_precision_score,
+    brier_score_loss,
+    f1_score,
     precision_score,
     recall_score,
     roc_auc_score,
@@ -186,13 +190,15 @@ def stream_split(
     }
 
 
-def metrics(y_true: np.ndarray, proba: np.ndarray) -> dict:
-    pred = (proba >= 0.5).astype(int)
+def metrics(y_true: np.ndarray, proba: np.ndarray, threshold: float = 0.5) -> dict:
+    pred = (proba >= threshold).astype(int)
     return {
         "auc": round(float(roc_auc_score(y_true, proba)), 4),
         "ap": round(float(average_precision_score(y_true, proba)), 4),
+        "brier": round(float(brier_score_loss(y_true, proba)), 4),
         "precision": round(float(precision_score(y_true, pred, zero_division=0)), 4),
         "recall": round(float(recall_score(y_true, pred, zero_division=0)), 4),
+        "f1": round(float(f1_score(y_true, pred, zero_division=0)), 4),
     }
 
 
@@ -226,3 +232,65 @@ def predict_proba(booster: lgb.Booster, X: np.ndarray) -> np.ndarray:
 def save_artifact(booster: lgb.Booster, path) -> None:
     """models/<cat>/model.lgb — text, compact, loadable via lgb.Booster(model_file=...)."""
     booster.save_model(str(path))
+
+
+# --------------------------------------------------------------------------- #
+# Threshold selection + calibration (valid split, never the sealed test year)
+# --------------------------------------------------------------------------- #
+THRESHOLD_GRID = tuple(round(t, 3) for t in np.arange(0.05, 0.951, 0.005))
+
+
+def choose_threshold(y_true: np.ndarray, proba: np.ndarray, grid=THRESHOLD_GRID) -> float:
+    """Decision threshold = argmax F1 on the VALIDATION split.
+
+    The grid is 0.05..0.95 step 0.005 (181 points) — sub-cent precision is
+    not meaningful for a probability model, and this keeps the choice
+    robust to the validation subsample. Returns 0.5 when F1 is undefined
+    (no positives in the split) so behaviour degrades to the historical
+    default instead of crashing.
+    """
+    y_true = np.asarray(y_true).astype(int)
+    proba = np.asarray(proba, dtype=np.float64)
+    best_t, best_f1 = 0.5, -1.0
+    for t in grid:
+        pred = (proba >= t).astype(int)
+        f1 = f1_score(y_true, pred, zero_division=0)
+        if f1 > best_f1:
+            best_f1, best_t = f1, t
+    if best_f1 <= 0.0:
+        # F1 never positive on the grid (e.g. no positives in the split) —
+        # degrade to the historical default instead of a spurious 0.05.
+        return 0.5
+    return float(best_t)
+
+
+def fit_calibrator(y_true: np.ndarray, proba: np.ndarray) -> dict | None:
+    """Isotonic calibrator on the validation split (returns None if it
+    cannot be fit — e.g. only one class present).
+
+    Returns a JSON-serialisable blob: {"kind": "isotonic", "x": [...],
+    "y": [...]}. Serving side: np.interp(p, x, y, left=y[0], right=y[-1])
+    (monotone by construction — isotonic regression output).
+    """
+    y_true = np.asarray(y_true).astype(int)
+    proba = np.asarray(proba, dtype=np.float64)
+    if len(np.unique(y_true)) < 2:
+        return None
+    iso = IsotonicRegression(y_min=0.0, y_max=1.0, out_of_bounds="clip")
+    iso.fit(proba, y_true)
+    x = iso.X_thresholds_.astype(np.float64).tolist()
+    y = iso.y_.astype(np.float64).tolist()
+    if not x or not y:
+        return None
+    return {"kind": "isotonic", "x": x, "y": y}
+
+
+def apply_calibrator(blob: dict | None, proba: np.ndarray | float) -> np.ndarray | float:
+    """Map raw model output through a stored isotonic blob (identity if None)."""
+    if blob is None:
+        return proba
+    x = np.asarray(blob["x"], dtype=np.float64)
+    y = np.asarray(blob["y"], dtype=np.float64)
+    if isinstance(proba, (int, float)):
+        return float(np.interp(proba, x, y, left=y[0], right=y[-1]))
+    return np.interp(np.asarray(proba, dtype=np.float64), x, y, left=y[0], right=y[-1])

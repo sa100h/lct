@@ -28,7 +28,10 @@ from app.main import Category
 from app.models.baseline import BaselineTrainer
 from app.models.lgbm_model import (
     LGB_PARAMS_DEFAULT,
+    apply_calibrator,
+    choose_threshold,
     engine_tag,
+    fit_calibrator,
     fit_lgbm,
     metrics,
     predict_proba,
@@ -39,6 +42,11 @@ from datetime import datetime, timezone
 
 FEAT_DIR = Path("/home/junai/lct/ml-data/features")
 TUNED_PATH = Path("/home/junai/lct/ml-data/lags/lgbm-tuned-results.json")
+
+# Categories where the decision threshold is chosen as argmax F1 on the
+# VALIDATION split (the sealed test year never influences the choice).
+# Others keep the historical default 0.5.
+THRESHOLD_CATEGORIES = {"sensor-failure", "unauthorized-access"}
 
 logger = logging.getLogger(__name__)
 
@@ -88,11 +96,20 @@ def train_lgbm(category: str, test_year: int = 2026, use_lags: bool = True,
     booster = fit_lgbm(train_data, params=params,
                        rounds=rounds or 300, valid=valid_data, early_stopping=50)
     final_rounds = rounds or booster.best_iteration or 300
+
+    # Decision threshold: argmax F1 on the Phase-1 valid proba (2025 split —
+    # the sealed test year never enters the choice). None = historical 0.5.
+    threshold = None
+    if category in THRESHOLD_CATEGORIES and valid_data is not None and ds["Xva"] is not None:
+        valid_proba = predict_proba(booster, ds["Xva"])
+        threshold = choose_threshold(ds["yva"], valid_proba)
+        logger.info("%s: threshold=%.3f (valid F1-max)", category, threshold)
+
     # Phase 2: final fit, fixed rounds, no early stopping — same train rows.
     booster = fit_lgbm(train_data, params=params, rounds=final_rounds)
 
     proba = predict_proba(booster, ds["Xte"])
-    m = metrics(ds["yte"], proba)
+    m = metrics(ds["yte"], proba, threshold=threshold if threshold is not None else 0.5)
     n_train, n_valid, n_test = ds["Xtr"].shape[0], (ds["Xva"].shape[0] if ds["Xva"] is not None else 0), ds["Xte"].shape[0]
     m.update({
         "engine": engine_tag(),
@@ -105,9 +122,11 @@ def train_lgbm(category: str, test_year: int = 2026, use_lags: bool = True,
         "tuned": bool(use_tuned),
         "test_positive_rate": round(float(ds["yte"].mean()), 4),
     })
-    get_registry().save(category, booster, ds["names"], m, engine=engine_tag())
-    logger.info("Trained %s (%s): %s", category, engine_tag(),
-                {k: m[k] for k in ("auc", "ap", "precision", "recall") if k in m})
+    get_registry().save(category, booster, ds["names"], m, engine=engine_tag(),
+                        threshold=threshold)
+    logger.info("Trained %s (%s): %s%s", category, engine_tag(),
+                {k: m[k] for k in ("auc", "ap", "precision", "recall") if k in m},
+                f" threshold={threshold}" if threshold is not None else "")
     return m
 
 

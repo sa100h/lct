@@ -1,4 +1,5 @@
-"""Serve-time observation store -> the 11 lag values for a subject.
+"""Serve-time observation store -> the 11 lag values for a subject AND the
+subject's latest full feature row (auto-feature assembly for /predict).
 
 Train/serve parity (the whole point): the store is built from the SAME
 features-<cat>.parquet the training lags were computed on (app/ingest/
@@ -8,6 +9,16 @@ inverse of what `compute_lags` saw during training. With history = the
 channel's rows strictly before decision day t, the 11 values equal the row-t
 training lags (locked by tests/test_lag_features.py::test_train_serve_parity).
 
+Auto features (`latest_features_for`): the features parquet is NOT sorted by
+(channel, day) — a channel's rows are scattered across the whole file, so
+"the channel's last row" = full file scan, per channel the row with max day
+(the honest source of the last observed feature vector). The store streams
+the file row-group by row-group, keeping per-channel (max day, row index) and
+then the raw feature row of that index. The row is the channel's LAST
+HISTORICAL observation — its 11 lag columns are that past day's lags, so the
+engine overrides the 11 lag slots with freshly computed serve lags and uses
+the row only for the base features (client > store > 0.0).
+
 Epoch-day origin: only DIFFERENCES are ever used (t - d_last, t - d[0], window
 edges), so an epoch day is safe on both sides (see lag_features.day_ordinal).
 
@@ -16,9 +27,10 @@ sentinel 9999), not an error — LightGBM handles NaN natively and the caller
 must not 422 a subject that simply has no history yet.
 
 Memory: sensor-failure is ~2.4M (channel, day, label) rows -> per-channel
-int32 day + float32 label arrays total ~20 MB; lazily loaded per category and
-cached. Batch refresh = rebuild the features parquet (feature_engine) then
-call store.refresh(category).
+int32 day + float32 label arrays total ~20 MB; latest feature rows are
+195 float32 per channel (~9 MB for 11.4k channels); lazily loaded per
+category and cached. Batch refresh = rebuild the features parquet
+(feature_engine) then call store.refresh(category).
 """
 
 from __future__ import annotations
@@ -42,12 +54,15 @@ def _feat_path(category: str) -> Path:
 
 
 class LagStore:
-    """Per-category, per-channel history -> 11 lag values at a decision day."""
+    """Per-category, per-channel history -> 11 lag values at a decision day,
+    plus the channel's latest full feature row for auto-feature assembly."""
 
     def __init__(self, feat_dir: str | Path = FEAT_DIR) -> None:
         self.feat_dir = Path(feat_dir)
         # category -> {channel: (d_ord int32 sorted, y float32)}
         self._hist: dict[str, dict[str, tuple[np.ndarray, np.ndarray]]] = {}
+        # category -> {channel: {feature_name: float}} — last observed row (max day)
+        self._latest: dict[str, dict[str, dict[str, float]]] = {}
         self._meta: dict[str, dict] = {}
 
     def _read_history(self, category: str) -> tuple[dict[str, tuple[np.ndarray, np.ndarray]], dict]:
@@ -123,7 +138,108 @@ class LagStore:
         """Rebuild after a feature_engine pass (drops cache)."""
         self._hist.pop(category, None)
         self._meta.pop(category, None)
+        self._latest.pop(category, None)
         return self.load(category)
+
+    # ---- auto-feature assembly: the channel's latest full feature row ----
+
+    def _latest_sidecar_path(self, category: str) -> Path:
+        return self.feat_dir / f"features-{category}-latest.parquet"
+
+    def _build_latest_sidecar(self, category: str) -> None:
+        """Build the one-row-per-channel sidecar (max day per channel).
+
+        Two streaming passes over features-<cat>.parquet:
+        pass 1 (channel, day only): vectorized per-channel argmax-day row index.
+        pass 2: pull the winning feature rows per row group (fancy indexing).
+
+        Persisted as a small parquet (one row per channel, ~11.5K rows for
+        sensor-failure) so serve time stays fast. Rows are unique per
+        (channel, day), so the max-day row is unique.
+        """
+        import pandas as pd
+
+        path = self.feat_dir / f"features-{category}.parquet"
+        pf = pq.ParquetFile(path)
+        schema = pf.schema_arrow
+        feature_cols = [
+            schema.field(i).name
+            for i in range(len(schema))
+            if schema.field(i).name not in ("channel", "day", "year", "label")
+        ]
+        n_rg = pf.metadata.num_row_groups
+        try:
+            per_rg = [
+                pf.read_row_group(i, columns=["channel", "day"]).to_pandas()
+                for i in range(n_rg)
+            ]
+            ch = pd.concat([r["channel"] for r in per_rg], ignore_index=True)
+            day = pd.concat([r["day"] for r in per_rg], ignore_index=True)
+            grp = np.repeat(np.arange(n_rg, dtype=np.int64), [len(r) for r in per_rg])
+            off = np.concatenate([np.arange(len(r), dtype=np.int64) for r in per_rg])
+
+            # per channel: position of the max-day row (rows unique per channel-day)
+            idx = day.groupby(ch, sort=False).idxmax().to_numpy()
+            ch_w = ch.to_numpy()[idx]
+            day_w = day.to_numpy()[idx]
+            grp_w = grp[idx]
+            off_w = off[idx]
+
+            rows = np.empty((len(idx), len(feature_cols)), dtype=np.float32)
+            for g in np.unique(grp_w):
+                sel = grp_w == g
+                table = pf.read_row_group(int(g), columns=feature_cols)
+                chunk = np.column_stack(
+                    [col.to_numpy(zero_copy_only=False) for col in table.columns]
+                )
+                rows[sel] = chunk[off_w[sel], :]
+                del table, chunk
+        finally:
+            pf.close()
+
+        out = pd.DataFrame(rows, columns=feature_cols)
+        out.insert(0, "day", day_w)
+        out.insert(0, "channel", ch_w)
+        out.to_parquet(self._latest_sidecar_path(category))
+        logger.info(
+            "LagStore[%s]: latest-feature sidecar built (%d channels -> %s)",
+            category, len(out), self._latest_sidecar_path(category),
+        )
+
+    def _read_latest(self, category: str) -> dict[str, dict[str, float]]:
+        """Load the sidecar -> {channel: {feature_name: float}} (NaNs preserved)."""
+        path = self._latest_sidecar_path(category)
+        if not path.exists():
+            self._build_latest_sidecar(category)
+        pf = pq.ParquetFile(path)
+        table = pf.read().to_pandas()
+        pf.close()
+        out: dict[str, dict[str, float]] = {}
+        for row in table.itertuples(index=False):
+            out[row[0]] = {
+                name: (float(v) if v is not None else float("nan"))
+                for name, v in zip(row._fields, row)
+                if name != "day"
+            }
+        return out
+
+    def _latest_ensure(self, category: str) -> None:
+        if category not in self._latest:
+            self._latest[category] = self._read_latest(category)
+
+    def latest_features_for(self, category: str, subject_id: str) -> dict[str, float] | None:
+        """The channel's last observed full feature row (all feature names, NaNs
+        preserved — LightGBM handles them natively), or None when the channel
+        has no history at all."""
+        hist = self._hist.get(category)
+        if hist is None:
+            self.load(category)
+            hist = self._hist.get(category, {})
+        if not hist or subject_id not in hist:
+            return None
+        self._latest_ensure(category)
+        row = self._latest[category].get(subject_id)
+        return dict(row) if row is not None else None
 
     def lags_for(self, category: str, subject_id: str, as_of) -> dict[str, float]:
         """The 11 lag values for a subject at decision day `as_of` (timestamp/str).

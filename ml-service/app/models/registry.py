@@ -47,7 +47,8 @@ class ModelRegistry:
         self.root.mkdir(parents=True, exist_ok=True)
 
     def save(self, category: str, model, feature_names: list[str], metrics: dict,
-             version: str | None = None, engine: str | None = None) -> None:
+             version: str | None = None, engine: str | None = None,
+             threshold: float | None = None, calibrator: dict | None = None) -> None:
         cat_dir = self.root / category
         cat_dir.mkdir(parents=True, exist_ok=True)
         version = version or f"v-{datetime.now(timezone.utc):%Y%m%d-%H%M%S}"
@@ -70,6 +71,10 @@ class ModelRegistry:
             "feature_names": feature_names,
             "metrics": metrics,
         }
+        if threshold is not None:
+            meta["threshold"] = float(threshold)
+        if calibrator is not None:
+            meta["calibrator"] = calibrator
         (cat_dir / "meta.json").write_text(json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8")
 
     def load(self, category: str):
@@ -88,6 +93,10 @@ class ModelRegistry:
 
     def feature_names(self, category: str) -> list[str]:
         return _load_meta(category).get("feature_names", [])
+
+    def load_meta(self, category: str) -> dict:
+        """Raw meta.json dict ({} when untrained) — threshold, calibrator, ..."""
+        return _load_meta(category)
 
     def threshold(self, category: str) -> float:
         """Decision threshold chosen during evaluation (meta.json 'threshold', default 0.5)."""
