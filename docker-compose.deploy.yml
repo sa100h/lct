@@ -164,6 +164,22 @@ services:
     restart: unless-stopped
     networks: [app-network]
 
+  ml-broker:
+    image: ${IMAGE_REGISTRY:-ghcr.io}/${IMAGE_NAMESPACE}/service-template-ml-broker:${ML_BROKER_IMAGE_TAG:-latest}
+    pull_policy: always
+    environment:
+      DB_DSN: host=postgres port=5432 dbname=app_db user=app_service password=${APP_DB_PASSWORD}
+      ML_BASE_URL: http://ml-service:8000
+    read_only: true
+    tmpfs: ["/tmp:size=50M"]
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    depends_on:
+      postgres: { condition: service_healthy }
+      ml-service: { condition: service_started }
+    restart: unless-stopped
+    networks: [app-network]
+
 volumes:
   postgres_data:
   loki_data:
