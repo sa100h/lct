@@ -25,11 +25,19 @@ import pytest
 
 REAL_FEAT_DIR = Path(os.environ.get("LCT_FEATURES_DIR", "/home/junai/lct/ml-data/features"))
 _PROBE_PARQUET = REAL_FEAT_DIR / "features-sensor-failure.parquet"
+_MODELS_DIR = Path(os.path.dirname(os.path.abspath(__file__))) / ".." / "models"
 
 
 def real_data_present() -> bool:
-    """True when the production feature parquets are available locally."""
-    return _PROBE_PARQUET.exists()
+    """True when the production data *and* trained models are available locally.
+
+    Both artifacts are required: feature parquets (for LagStore parity) and
+    at least one trained model artifact (``models/<cat>/meta.json``), since
+    the real-data tests also load persisted models.
+    """
+    if not _PROBE_PARQUET.exists():
+        return False
+    return any(_MODELS_DIR.glob("*/meta.json")) if _MODELS_DIR.is_dir() else False
 
 
 def pytest_configure(config):
