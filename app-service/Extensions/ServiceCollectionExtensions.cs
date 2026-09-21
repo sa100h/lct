@@ -48,6 +48,35 @@ public static class ServiceCollectionExtensions
 
         var mlBaseUrl = configuration["MlService:BaseUrl"] ?? "http://localhost:8000";
         services.AddHttpClient<IMlServiceClient, MlServiceClient>(client => client.BaseAddress = new Uri(mlBaseUrl));
+
+        var eventFeed = configuration.GetSection(EventFeedOptions.SectionName).Get<EventFeedOptions>()
+            ?? new EventFeedOptions();
+        ValidateEventFeedOptions(eventFeed);
+        services.AddSingleton(eventFeed);
+        if (eventFeed.Enabled)
+        {
+            services.AddHttpClient<IEventFeedClient, TestEventFeedClient>(client =>
+            {
+                client.BaseAddress = new Uri(eventFeed.BaseUrl);
+                client.Timeout = eventFeed.RequestTimeout;
+            });
+            services.AddSingleton<IEventBatchHandler, LoggingEventBatchHandler>();
+            services.AddHostedService<EventFeedPollingWorker>();
+        }
         return services;
+    }
+
+    private static void ValidateEventFeedOptions(EventFeedOptions options)
+    {
+        if (!Uri.TryCreate(options.BaseUrl, UriKind.Absolute, out _))
+            throw new InvalidOperationException("EventFeed:BaseUrl must be an absolute URL.");
+        if (options.PollInterval <= TimeSpan.Zero)
+            throw new InvalidOperationException("EventFeed:PollInterval must be positive.");
+        if (options.Lookback < options.PollInterval)
+            throw new InvalidOperationException("EventFeed:Lookback must be at least PollInterval.");
+        if (options.PageSize is < 1 or > 5000)
+            throw new InvalidOperationException("EventFeed:PageSize must be between 1 and 5000.");
+        if (options.RequestTimeout <= TimeSpan.Zero)
+            throw new InvalidOperationException("EventFeed:RequestTimeout must be positive.");
     }
 }

@@ -21,6 +21,25 @@ services:
     restart: unless-stopped
     networks: [app-network]
 
+  test-event-feeder:
+    build:
+      context: .
+      dockerfile: test-event-feeder/Dockerfile
+    environment:
+      FEED_ARCHIVE_PATH: /data/ext-journal-2026.7z
+      FEED_CACHE_DIRECTORY: /cache
+      FEED_SOURCE_START_AT: ${FEED_SOURCE_START_AT:-2026-01-01T00:00:00}
+      FEED_TIME_ZONE: ${FEED_TIME_ZONE:-Europe/Moscow}
+    volumes:
+      - ./ext-journal-2026.7z:/data/ext-journal-2026.7z:ro
+      - event_feed_cache:/cache
+    read_only: true
+    tmpfs: ["/tmp:size=50M"]
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    restart: unless-stopped
+    networks: [app-network]
+
   # loki:
   #   profiles: [observability]
   #   image: grafana/loki:3.4.2
@@ -144,6 +163,12 @@ services:
       ConnectionStrings__AppDb: Host=postgres;Port=5432;Database=app_db;Username=app_service;Password=${APP_DB_PASSWORD}
       Migrations__Path: /migrations/app_db
       MlService__BaseUrl: http://ml-service:8000
+      EventFeed__Enabled: "true"
+      EventFeed__BaseUrl: http://test-event-feeder:8000
+      EventFeed__PollInterval: 00:05:00
+      EventFeed__Lookback: 00:07:00
+      EventFeed__PageSize: "1000"
+      EventFeed__RequestTimeout: 00:00:30
       Observability__OtlpEndpoint: ""
       Jwt__PublicKeyPath: /run/secrets/jwt-public.pem
       Jwt__PrivateKeyPath: /run/secrets/jwt-private.pem
@@ -165,6 +190,7 @@ services:
     security_opt: ["no-new-privileges:true"]
     depends_on:
       postgres: { condition: service_healthy }
+      test-event-feeder: { condition: service_started }
     restart: unless-stopped
     networks: [app-network]
 
@@ -231,6 +257,7 @@ services:
 
 volumes:
   postgres_data:
+  event_feed_cache:
   # loki_data:
   # prometheus_data:
   # tempo_data:

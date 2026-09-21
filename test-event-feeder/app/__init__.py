@@ -1,0 +1,2 @@
+"""Test event feed emulator."""
+

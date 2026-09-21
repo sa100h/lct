@@ -23,6 +23,7 @@ __pycache__/
 # ingested data (organizer exports, local only)
 ml-data/*
 !ml-data/.gitkeep
+ext-journal-*.7z
 
 
 #ignore files drawio
