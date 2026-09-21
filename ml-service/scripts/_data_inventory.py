@@ -1,0 +1,1 @@
+/home/junai/lct/ml-service/scripts/_data_inventory.py
