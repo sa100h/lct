@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from fastapi.testclient import TestClient
+import pytest
 
 from app.main import app, Category
 from app.models.baseline import BaselineTrainer
@@ -73,8 +74,14 @@ def test_features_schema_consistency():
         assert len(set(names)) == 6
 
 
+@pytest.mark.requires_real_data
 def test_models_have_lag_features_and_load():
-    """T7: persisted models carry the 11 lag feature names and their artifact loads."""
+    """T7: persisted models carry the 11 lag feature names and their artifact loads.
+
+    Requires the locally-trained production models (195-feature real data)
+    in ``ml-service/models/`` — production box only; skipped in CI (see
+    conftest).
+    """
     from app.ingest.lag_features import LAG_FEATURES
     from app.models.registry import get_registry
 

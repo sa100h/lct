@@ -172,8 +172,13 @@ def test_same_day_rows_excluded_from_history():
 # ---------------------------------------------------------------------------
 # real data: LagStore on the production sensor-failure parquet
 # ---------------------------------------------------------------------------
+@pytest.mark.requires_real_data
 def test_store_parity_real_data():
-    """store.lags_for(channel, as_of=day_t) == training lags of row t (1 sample)."""
+    """store.lags_for(channel, as_of=day_t) == training lags of row t (1 sample).
+
+    Requires the production ``ml-data/features`` parquets + a trained real
+    model — production box only; skipped in CI (see conftest).
+    """
     store = LagStore(feat_dir=FEAT_DIR)
     meta = store.load("sensor-failure")
     assert meta["status"] == "ok" and meta["n_channels"] > 0
