@@ -18,7 +18,7 @@ The identity is recorded explicitly in `equipment_channel_map` (see below) so th
 joins between equipment and ML output go through a verifiable table instead of an
 implicit assumption.
 
-## Tables (migration `006_channel_mapping.sql`)
+## Tables (migration `008_channel_mapping.sql`)
 
 - **`channel_directory`** — the organizer's channel reference, one row per data
   channel (`channel_directory.channel_id` PK). Columns: `type_system`, `type_sensor`,
