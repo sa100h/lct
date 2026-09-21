@@ -15,6 +15,9 @@ browser → api-proxy (YARP:80/443)
 
 ## Быстрый старт
 
+- скачать ext-journal-2026.7z (датасет) с [яндекс диска](https://disk.360.yandex.ru/client/aa/d_Os09EWI6VU093g/) (пароль: `svph98rg48pegha&`) 
+- положить ext-journal-2026.7z в репозиторий
+
 ```bash
 cp .env.example .env      # сменить пароли
 docker compose up --build
