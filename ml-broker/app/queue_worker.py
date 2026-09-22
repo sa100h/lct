@@ -84,19 +84,28 @@ class QueueWorker:
 
     async def _process_row(self, row: QueueRow) -> None:
         attempts = row.attempts + 1  # this attempt
+        result = None
+        err: str | None = None
         try:
             result = await self._call_predict(row)
         except httpx.HTTPStatusError as exc:
             status = exc.response.status_code
             if 500 <= status < 600:
-                raise  # retryable
-            self._stats["failed"] += 1
-            await self._db.mark_failed(row.id, attempts, f"HTTP {status}: {exc.response.text[:300]}")
-            log.error("predict rejected", id=row.id, status=status, body=exc.response.text[:300])
-            return
+                # Retryable server error — route through mark_retry/mark_failed
+                # (a bare `raise` would strand the row `running`: claim_batch
+                # only takes `pending` and requeue_orphans runs at startup).
+                err = f"HTTP {status}: {exc.response.text[:300]}"
+                log.warning("predict 5xx", id=row.id, status=status, body=exc.response.text[:300])
+            else:
+                # 4xx = the request itself is wrong; retrying will not fix it.
+                self._stats["failed"] += 1
+                await self._db.mark_failed(row.id, attempts, f"HTTP {status}: {exc.response.text[:300]}")
+                log.error("predict rejected", id=row.id, status=status, body=exc.response.text[:300])
+                return
         except (httpx.TimeoutException, httpx.TransportError) as exc:
             err = f"{type(exc).__name__}: {exc}"
-        else:
+
+        if result is not None:
             await self._persist_prediction(row, result)
             await self._db.mark_done(row.id)
             self._stats["done"] += 1
@@ -104,11 +113,11 @@ class QueueWorker:
             return
 
         if attempts < self._cfg.max_attempts:
-            await self._db.mark_retry(row.id, attempts, err, self._cfg.retry_backoff_seconds)
+            await self._db.mark_retry(row.id, attempts, err or "unknown error", self._cfg.retry_backoff_seconds)
             self._stats["retried"] += 1
             log.warning("predict failed, will retry", id=row.id, attempt=attempts, error=err)
         else:
-            await self._db.mark_failed(row.id, attempts, err)
+            await self._db.mark_failed(row.id, attempts, err or "unknown error")
             self._stats["failed"] += 1
             log.error("predict failed permanently", id=row.id, error=err)
 
