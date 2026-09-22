@@ -72,6 +72,8 @@ public static class ServiceCollectionExtensions
             throw new InvalidOperationException("EventFeed:BaseUrl must be an absolute URL.");
         if (options.PollInterval <= TimeSpan.Zero)
             throw new InvalidOperationException("EventFeed:PollInterval must be positive.");
+        if (options.RetryInterval <= TimeSpan.Zero || options.RetryInterval > options.PollInterval)
+            throw new InvalidOperationException("EventFeed:RetryInterval must be positive and no greater than PollInterval.");
         if (options.Lookback < options.PollInterval)
             throw new InvalidOperationException("EventFeed:Lookback must be at least PollInterval.");
         if (options.PageSize is < 1 or > 5000)

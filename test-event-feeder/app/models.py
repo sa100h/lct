@@ -37,7 +37,7 @@ class FeedStatus(ApiModel):
     source_min_at: datetime
     source_max_at: datetime
     source_start_at: datetime
+    source_end_at: datetime
     current_source_at: datetime
     wall_started_at: datetime
     exhausted: bool
-

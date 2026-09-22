@@ -12,7 +12,7 @@ import subprocess
 import uuid
 from collections import OrderedDict
 from contextlib import ExitStack
-from datetime import date, datetime, timedelta, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import BinaryIO, TextIO
 
@@ -29,6 +29,7 @@ EXPECTED_COLUMNS = [
 ]
 TRUE_VALUES = {"1", "t", "true", "yes"}
 LOGGER = logging.getLogger("uvicorn.error")
+CACHE_FORMAT_VERSION = 2
 
 
 class EventArchiveStore:
@@ -46,9 +47,14 @@ class EventArchiveStore:
         if not archive.is_file():
             raise FileNotFoundError(f"Event archive was not found: {archive}")
 
+        self._settings.cache_directory.mkdir(parents=True, exist_ok=True)
+        self._remove_abandoned_preparations()
         fingerprint = self._fingerprint(archive)
         manifest = self._load_manifest()
         if manifest is None or manifest.get("fingerprint") != fingerprint:
+            if self._data_directory.exists():
+                LOGGER.info("Removing incompatible prepared event cache from %s", self._data_directory)
+                shutil.rmtree(self._data_directory)
             LOGGER.info("Preparing event archive %s into %s", archive, self._data_directory)
             self._prepare_archive(archive, fingerprint)
             manifest = self._load_manifest()
@@ -58,24 +64,17 @@ class EventArchiveStore:
         if manifest is None:
             raise RuntimeError("Prepared event manifest is missing")
 
-        source_min = self._parse_source_datetime(str(manifest["source_min_at"]))
-        source_max = self._parse_source_datetime(str(manifest["source_max_at"]))
-        if not source_min <= self._settings.source_start_at <= source_max:
-            raise ValueError(
-                "FEED_SOURCE_START_AT must be inside the source range "
-                f"{source_min.isoformat()}..{source_max.isoformat()}"
-            )
-
         self._manifest = manifest
         # The replay begins when the feeder is actually ready, so archive preparation
         # cannot silently consume the first minutes of the configured source range.
         self._wall_started_at = datetime.now(timezone.utc)
         LOGGER.info(
-            "Event feed ready: events=%s, source=%s..%s, replay_start=%s",
+            "Event feed ready: events=%s, cached_source=%s..%s, replay_start=%s, duration=%s",
             manifest["event_count"],
             manifest["source_min_at"],
             manifest["source_max_at"],
             self._settings.source_start_at.isoformat(),
+            self._settings.cache_duration,
         )
 
     def get_events(
@@ -117,16 +116,18 @@ class EventArchiveStore:
         self._ensure_ready()
         source_min = self._parse_source_datetime(str(self._manifest["source_min_at"]))
         source_max = self._parse_source_datetime(str(self._manifest["source_max_at"]))
+        source_end = self._settings.source_start_at + self._settings.cache_duration
         current_source = self._wall_to_source(datetime.now(timezone.utc))
         return FeedStatus(
-            state="exhausted" if current_source > source_max else "running",
+            state="exhausted" if current_source >= source_end else "running",
             loaded_events=int(self._manifest["event_count"]),
             source_min_at=source_min,
             source_max_at=source_max,
             source_start_at=self._settings.source_start_at,
+            source_end_at=source_end,
             current_source_at=current_source,
             wall_started_at=self._wall_started_at,
-            exhausted=current_source > source_max,
+            exhausted=current_source >= source_end,
         )
 
     def _read_source_window(self, source_from: datetime, source_to: datetime) -> list[EventDto]:
@@ -167,8 +168,13 @@ class EventArchiveStore:
         days_directory.mkdir(parents=True)
 
         event_count = 0
+        scanned_count = 0
         source_min: datetime | None = None
         source_max: datetime | None = None
+        archive_min: datetime | None = None
+        archive_max: datetime | None = None
+        window_start = self._settings.source_start_at
+        window_end = window_start + self._settings.cache_duration
         writers: OrderedDict[str, tuple[TextIO, csv.DictWriter]] = OrderedDict()
 
         try:
@@ -182,12 +188,22 @@ class EventArchiveStore:
 
                 for row in reader:
                     source_at = self._row_datetime(row)
+                    scanned_count += 1
+                    archive_min = source_at if archive_min is None else min(archive_min, source_at)
+                    archive_max = source_at if archive_max is None else max(archive_max, source_at)
+                    if scanned_count % 1_000_000 == 0:
+                        LOGGER.info(
+                            "Scanned %s rows; cached %s rows from the selected window",
+                            f"{scanned_count:,}",
+                            f"{event_count:,}",
+                        )
+                    if not window_start <= source_at < window_end:
+                        continue
+
                     day_key = source_at.date().isoformat()
                     writer = self._get_day_writer(day_key, days_directory, writers)
                     writer.writerow(row)
                     event_count += 1
-                    if event_count % 1_000_000 == 0:
-                        LOGGER.info("Prepared %s event rows", f"{event_count:,}")
                     source_min = source_at if source_min is None else min(source_min, source_at)
                     source_max = source_at if source_max is None else max(source_max, source_at)
 
@@ -196,22 +212,35 @@ class EventArchiveStore:
             writers.clear()
 
             if event_count == 0 or source_min is None or source_max is None:
-                raise ValueError("The event archive contains no events")
+                archive_range = (
+                    f"{archive_min.isoformat()}..{archive_max.isoformat()}"
+                    if archive_min is not None and archive_max is not None
+                    else "empty"
+                )
+                raise ValueError(
+                    "The selected feed window contains no events: "
+                    f"{window_start.isoformat()}..{window_end.isoformat()}; archive range: {archive_range}"
+                )
 
             manifest = {
                 "fingerprint": fingerprint,
                 "event_count": event_count,
+                "scanned_event_count": scanned_count,
                 "source_min_at": source_min.isoformat(),
                 "source_max_at": source_max.isoformat(),
+                "source_start_at": window_start.isoformat(),
+                "source_end_at": window_end.isoformat(),
             }
             (temporary / "manifest.json").write_text(
                 json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8"
             )
 
-            if self._data_directory.exists():
-                shutil.rmtree(self._data_directory)
             os.replace(temporary, self._data_directory)
-            LOGGER.info("Archive preparation completed: %s event rows", f"{event_count:,}")
+            LOGGER.info(
+                "Archive scan completed: scanned=%s, cached=%s",
+                f"{scanned_count:,}",
+                f"{event_count:,}",
+            )
         except Exception:
             for stream, _ in writers.values():
                 stream.close()
@@ -277,11 +306,25 @@ class EventArchiveStore:
             return None
         return json.loads(self._manifest_path.read_text(encoding="utf-8"))
 
-    @staticmethod
-    def _fingerprint(path: Path) -> str:
+    def _fingerprint(self, path: Path) -> str:
         stat = path.stat()
-        value = f"{path.name}:{stat.st_size}:{stat.st_mtime_ns}".encode()
+        value = ":".join(
+            [
+                str(CACHE_FORMAT_VERSION),
+                path.name,
+                str(stat.st_size),
+                str(stat.st_mtime_ns),
+                self._settings.source_start_at.isoformat(),
+                str(self._settings.cache_duration.total_seconds()),
+            ]
+        ).encode()
         return hashlib.sha256(value).hexdigest()
+
+    def _remove_abandoned_preparations(self) -> None:
+        for path in self._settings.cache_directory.glob("preparing-*"):
+            if path.is_dir():
+                LOGGER.info("Removing abandoned event cache preparation from %s", path)
+                shutil.rmtree(path)
 
     @staticmethod
     def _encode_cursor(from_at: datetime, to_at: datetime, offset: int) -> str:

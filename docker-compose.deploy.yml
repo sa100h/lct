@@ -27,6 +27,7 @@ services:
       FEED_ARCHIVE_PATH: /data/ext-journal-2026.7z
       FEED_CACHE_DIRECTORY: /cache
       FEED_SOURCE_START_AT: ${FEED_SOURCE_START_AT:-2026-01-01T00:00:00}
+      FEED_CACHE_DURATION: ${FEED_CACHE_DURATION:-06:00:00}
       FEED_TIME_ZONE: ${FEED_TIME_ZONE:-Europe/Moscow}
     volumes:
       - ./ext-journal-2026.7z:/data/ext-journal-2026.7z:ro
@@ -149,6 +150,7 @@ services:
       EventFeed__Enabled: "true"
       EventFeed__BaseUrl: http://test-event-feeder:8000
       EventFeed__PollInterval: 00:05:00
+      EventFeed__RetryInterval: 00:00:10
       EventFeed__Lookback: 00:07:00
       EventFeed__PageSize: "1000"
       EventFeed__RequestTimeout: 00:00:30
@@ -169,7 +171,7 @@ services:
     security_opt: ["no-new-privileges:true"]
     depends_on:
       postgres: { condition: service_healthy }
-      test-event-feeder: { condition: service_started }
+      test-event-feeder: { condition: service_healthy }
     restart: unless-stopped
     networks: [app-network]
 

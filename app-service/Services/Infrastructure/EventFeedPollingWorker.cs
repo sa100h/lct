@@ -16,11 +16,12 @@ public sealed class EventFeedPollingWorker(
     {
         while (!stoppingToken.IsCancellationRequested)
         {
-            await PollSafelyAsync(stoppingToken);
+            var succeeded = await PollSafelyAsync(stoppingToken);
+            var delay = succeeded ? options.PollInterval : options.RetryInterval;
 
             try
             {
-                await Task.Delay(options.PollInterval, timeProvider, stoppingToken);
+                await Task.Delay(delay, timeProvider, stoppingToken);
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
             {
@@ -84,19 +85,24 @@ public sealed class EventFeedPollingWorker(
             pages);
     }
 
-    private async Task PollSafelyAsync(CancellationToken cancellationToken)
+    private async Task<bool> PollSafelyAsync(CancellationToken cancellationToken)
     {
         try
         {
             await PollOnceAsync(cancellationToken);
+            return true;
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
-            // Normal host shutdown.
+            return false;
         }
         catch (Exception exception)
         {
-            logger.LogWarning(exception, "Event feed poll failed; the next scheduled poll will retry.");
+            logger.LogWarning(
+                exception,
+                "Event feed poll failed; retrying in {RetryInterval}.",
+                options.RetryInterval);
+            return false;
         }
     }
 

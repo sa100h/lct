@@ -11,4 +11,6 @@ certs
 **/node_modules
 **/dist
 **/*.*proj.user
+ml-data
+ext-journal-*.7z
 
