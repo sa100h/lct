@@ -6,7 +6,7 @@
     display: flex;
     align-items: center;
     gap: 12px;
-    padding-inline: 16px;
+    padding-inline: 16px 16px;
     background: #fff;
 }
 
