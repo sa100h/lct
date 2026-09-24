@@ -65,7 +65,20 @@ export default function Login() {
             />
           ) : null}
 
-          <Form layout="vertical" requiredMark onFinish={onFinish}>
+          <Form
+            layout="vertical"
+            requiredMark={(label, { required }) =>
+              required ? (
+                <>
+                  {label}
+                  <span className="login-required"> *</span>
+                </>
+              ) : (
+                label
+              )
+            }
+            onFinish={onFinish}
+          >
             <Form.Item
               name="login"
               label="Логин"

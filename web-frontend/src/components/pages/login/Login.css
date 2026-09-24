@@ -56,8 +56,7 @@
     font-size: 36px;
     font-weight: 700;
     letter-spacing: 0.02em;
-    color: #f8fbff;
-    text-shadow: 0 2px 16px rgba(59, 130, 246, 0.25);
+    color: #3b82f6;
 }
 
 .login-card {
@@ -89,6 +88,14 @@
 .login-card .ant-form-item-label > label {
     font-weight: 600;
     color: #111827;
+}
+
+.login-card .ant-form-item-required::before {
+    display: none !important;
+}
+
+.login-required {
+    color: #ef4444;
 }
 
 .login-card .ant-input-affix-wrapper,
