@@ -1,6 +1,6 @@
 import { Button, Dropdown } from 'antd'
 import { MenuOutlined, UserOutlined } from '@ant-design/icons'
-import { useDispatch } from 'react-redux'
+import { useDispatch, useSelector } from 'react-redux'
 import { useNavigate } from 'react-router-dom'
 import { logout } from '@/api/auth.js'
 import { clearSession } from '@/store/authSlice.js'
@@ -11,6 +11,7 @@ import './Header.css'
 const Header = () => {
   const dispatch = useDispatch()
   const navigate = useNavigate()
+  const login = useSelector((state) => state.auth.login)
 
   const onMenuClick = async ({ key }) => {
     if (key !== 'logout') {
@@ -47,11 +48,14 @@ const Header = () => {
             onClick: onMenuClick,
           }}
         >
-          <Button
-            type="text"
-            className="header-profile-btn"
-            icon={<UserOutlined />}
-          />
+          <div className="header-profile">
+            {login ? <span className="header-profile-name">{login}</span> : null}
+            <Button
+              type="text"
+              className="header-profile-btn"
+              icon={<UserOutlined />}
+            />
+          </div>
         </Dropdown>
       </div>
     </div>

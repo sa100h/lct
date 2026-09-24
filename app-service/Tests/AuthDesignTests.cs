@@ -59,7 +59,7 @@ public sealed class AuthDesignTests
             var userId = Guid.NewGuid();
             var familyId = Guid.NewGuid();
             var jwt = new JwtSecurityTokenHandler().ReadJwtToken(
-                issuer.IssueAccess(userId, familyId, "dispatcher_district", now));
+                issuer.IssueAccess(userId, familyId, "dispatcher_district", "dispetcher_rayon", now));
 
             Assert.Equal("RS256", jwt.Header.Alg);
             Assert.Equal("lct-test", jwt.Issuer);
@@ -68,6 +68,7 @@ public sealed class AuthDesignTests
             Assert.Equal(userId.ToString(), jwt.Subject);
             Assert.Equal(familyId.ToString(), jwt.Claims.Single(c => c.Type == JwtClaimNames.SessionId).Value);
             Assert.Equal("dispatcher_district", jwt.Claims.Single(c => c.Type == JwtClaimNames.Role).Value);
+            Assert.Equal("dispetcher_rayon", jwt.Claims.Single(c => c.Type == JwtClaimNames.Login).Value);
             Assert.Contains(jwt.Claims, c => c.Type == JwtClaimNames.Permission && c.Value == PermissionCodes.DemoAccess);
             using var payload = JsonDocument.Parse(jwt.Payload.SerializeToJson());
             Assert.Equal(JsonValueKind.Array,

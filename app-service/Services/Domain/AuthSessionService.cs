@@ -37,7 +37,7 @@ public sealed class AuthSessionService(
         var expiresAt = now.AddDays(jwtOptions.RefreshLifetimeDays);
         var familyId = Guid.NewGuid();
         var refresh = tokens.CreateRefresh();
-        var access = tokens.IssueAccess(identity.Id, familyId, role, now);
+        var access = tokens.IssueAccess(identity.Id, familyId, role, identity.Login, now);
         await store.CreateLoginAsync(identity, familyId, Guid.NewGuid(),
             tokens.HashRefresh(refresh), now, expiresAt, cancellationToken);
         return AuthResult.Success(access, refresh, expiresAt);
@@ -84,7 +84,7 @@ public sealed class AuthSessionService(
 
         var nextRefresh = tokens.CreateRefresh();
         var nextHash = tokens.HashRefresh(nextRefresh);
-        var access = tokens.IssueAccess(identity.Id, presented.FamilyId, role, now);
+        var access = tokens.IssueAccess(identity.Id, presented.FamilyId, role, identity.Login, now);
         var rotation = await store.RotateAsync(identity, presented, presentedHash,
             nextHash, Guid.NewGuid(), now, cancellationToken);
         return rotation == RefreshRotationResult.Success

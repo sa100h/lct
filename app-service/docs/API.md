@@ -50,7 +50,7 @@ JSON: `Content-Type: application/json`, имена полей **camelCase**.
 
 Set-Cookie: `lct_refresh=<token>; HttpOnly; Secure; SameSite=Strict; Path=/api/app/auth`.
 
-Access JWT (полезная нагрузка): `sub` (user id), `sid` (семья сессии), `role`, `permissions` (массив строк), `jti`, `iat`, `iss`, `aud`, `exp`.
+Access JWT (полезная нагрузка): `sub` (user id), `sid` (семья сессии), `role`, `login` (sAMAccountName), `permissions` (массив строк), `jti`, `iat`, `iss`, `aud`, `exp`.
 
 **Пример**
 

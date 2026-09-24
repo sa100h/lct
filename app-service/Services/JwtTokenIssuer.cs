@@ -25,13 +25,14 @@ public sealed class JwtTokenIssuer : ITokenIssuer, IDisposable
         credentials = new SigningCredentials(new RsaSecurityKey(privateKey), SecurityAlgorithms.RsaSha256);
     }
 
-    public string IssueAccess(Guid userId, Guid familyId, string role, DateTimeOffset now)
+    public string IssueAccess(Guid userId, Guid familyId, string role, string login, DateTimeOffset now)
     {
         var claims = new List<Claim>
         {
             new(JwtRegisteredClaimNames.Sub, userId.ToString()),
             new(JwtClaimNames.SessionId, familyId.ToString()),
             new(JwtClaimNames.Role, role),
+            new(JwtClaimNames.Login, login),
             new(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString()),
             new(JwtRegisteredClaimNames.Iat, now.ToUnixTimeSeconds().ToString(), ClaimValueTypes.Integer64)
         };
