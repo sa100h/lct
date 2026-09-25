@@ -32,17 +32,22 @@ STATE: dict[str, object] = {"status": "starting"}
 
 
 async def main() -> None:
-    configure()
     cfg = Config()
+    configure(cfg.log_level)
     wake = asyncio.Event()
     log.info(
         "ml-broker starting",
         db=cfg.db_dsn.replace("password=***", ""),
         ml=cfg.ml_base_url,
         health=f"{cfg.health_host}:{cfg.health_port}",
+        level=cfg.log_level,
     )
 
-    pool = await Db.connect(cfg.db_dsn)
+    try:
+        pool = await Db.connect(cfg.db_dsn)
+    except Exception as exc:  # noqa: BLE001 — DB is mandatory; can't start without it
+        log.fatal("db connection failed, cannot start", error=repr(exc))
+        raise
     db = Db(pool, cfg)
     recovered = await db.requeue_orphans()
     if recovered:
@@ -54,7 +59,12 @@ async def main() -> None:
     sched = Scheduler(db, client, cfg, wake)
 
     health = HealthServer(cfg.health_host, cfg.health_port, worker, notifier)
-    await health.start()
+    try:
+        await health.start()
+    except OSError as exc:
+        log.fatal("health server failed to bind", host=cfg.health_host, port=cfg.health_port, error=repr(exc))
+        await db.close()
+        raise
 
     async with client:
         await notifier.start()
