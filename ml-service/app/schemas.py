@@ -46,6 +46,30 @@ class Prediction(BaseModel):
     feature_importance: dict[str, float] = Field(default_factory=dict)
 
 
+class AllCategoriesRequest(BaseModel):
+    subject_id: str = Field(..., description="Sensor/channel id to score across all categories.")
+    current_features: dict[str, float] = Field(
+        default_factory=dict,
+        description="Optional client-side feature overrides (same names as /predict).",
+    )
+    horizon_hours: int = Field(PREDICTION_HORIZON_HOURS, ge=1, le=168)
+
+
+class AllPrediction(BaseModel):
+    category: Category
+    applicable: bool = Field(
+        ...,
+        description="False when the channel never trained this category (wrong subsystem).",
+    )
+    prediction: Prediction | None = None
+
+
+class AllCategoriesResponse(BaseModel):
+    subject_id: str
+    horizon_hours: int
+    predictions: list[AllPrediction]
+
+
 class StatusResponse(BaseModel):
     service: str
     state: str

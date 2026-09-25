@@ -259,6 +259,19 @@ class LagStore:
         t = int(day_ordinal(as_of))
         return lag_values_for_history(pair[0], pair[1], t)
 
+    def has_subject(self, category: str, subject_id: str) -> bool:
+        """True when the channel is in this category's training history.
+
+        Proxy for category applicability: feature_engine builds each category's
+        parquet from its subsystem's channels only (CATS), so membership here
+        means the category's model has actually seen this channel's data.
+        """
+        hist = self._hist.get(category)
+        if hist is None:
+            self.load(category)
+            hist = self._hist.get(category, {})
+        return subject_id in (hist or {})
+
     def subjects(self, category: str) -> list[str]:
         if category not in self._hist:
             self.load(category)

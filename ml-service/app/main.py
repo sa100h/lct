@@ -17,7 +17,15 @@ from app.models.baseline import BaselineTrainer
 from app.models.registry import get_registry
 from app.predict.engine import PredictEngine
 from app.predict.lag_store import get_store
-from app.schemas import Category, Prediction, PredictionRequest, RetrainRequest, StatusResponse
+from app.schemas import (
+    AllCategoriesRequest,
+    AllCategoriesResponse,
+    Category,
+    Prediction,
+    PredictionRequest,
+    RetrainRequest,
+    StatusResponse,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -84,6 +92,16 @@ def predict(req: PredictionRequest) -> Prediction:
     engine: PredictEngine = app.state.engine
     try:
         return engine.predict(req.category.value, req.subject_id, req.current_features, req.horizon_hours)
+    except KeyError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@app.post("/predict_all", response_model=AllCategoriesResponse)
+def predict_all(req: AllCategoriesRequest) -> AllCategoriesResponse:
+    """All four categories for one incoming sensor signal in a single run."""
+    engine: PredictEngine = app.state.engine
+    try:
+        return engine.predict_all(req.subject_id, req.current_features, req.horizon_hours)
     except KeyError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 

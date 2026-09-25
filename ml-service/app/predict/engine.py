@@ -27,9 +27,9 @@ import numpy as np
 
 from app.ingest.lag_features import LAG_SET
 from app.models.lgbm_model import apply_calibrator
-from app.models.registry import get_registry
+from app.models.registry import CATEGORIES, get_registry
 from app.predict.lag_store import get_store
-from app.schemas import Prediction
+from app.schemas import AllCategoriesResponse, AllPrediction, Category, Prediction
 
 
 def is_booster(model: object) -> bool:
@@ -127,4 +127,32 @@ class PredictEngine:
             predicted_at=datetime.now(timezone.utc),
             model_version=state.model_version,
             feature_importance=named,
+        )
+
+    def predict_all(
+        self,
+        subject_id: str,
+        features: dict[str, float] | None,
+        horizon_hours: int,
+        as_of: datetime | None = None,
+    ) -> AllCategoriesResponse:
+        """One run over all four categories for a single incoming sensor signal.
+
+        Same as_of for every category; per-category vector assembly and model
+        calls reuse predict() verbatim, so results are identical to four
+        /predict calls. Categories the channel never trained on (wrong
+        subsystem — see feature_engine.CATS) come back applicable=False with
+        prediction=None instead of a meaningless score.
+        """
+        as_of = as_of or datetime.now(timezone.utc)
+        store = get_store()
+        out: list[AllPrediction] = []
+        for cat in CATEGORIES:
+            if not store.has_subject(cat, subject_id):
+                out.append(AllPrediction(category=Category(cat), applicable=False))
+                continue
+            p = self.predict(cat, subject_id, features, horizon_hours, as_of=as_of)
+            out.append(AllPrediction(category=Category(cat), applicable=True, prediction=p))
+        return AllCategoriesResponse(
+            subject_id=subject_id, horizon_hours=horizon_hours, predictions=out
         )
