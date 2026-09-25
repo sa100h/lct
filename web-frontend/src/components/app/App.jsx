@@ -8,6 +8,7 @@ import i18n from '@/i18n/index.js'
 import { refresh } from '@/api/auth.js'
 import GuestOnly from '@/components/auth/GuestOnly.jsx'
 import RequireAuth from '@/components/auth/RequireAuth.jsx'
+import RequireModule from '@/components/auth/RequireModule.jsx'
 import AppLayout from '@/components/appLayout/AppLayout.jsx'
 import Login from '@/components/pages/login/Login.jsx'
 import Home from '../pages/homePage/Home'
@@ -38,14 +39,19 @@ const router = createBrowserRouter([
       </RequireAuth>
     ),
     children: [
-      { path: '/', element: <Home /> },
-      { path: '/dashboard', element: <Dashboard /> },
-      { path: '/map', element: <Map /> },
-      { path: '/prediction', element: <Prediction /> },
-      { path: '/history', element: <History /> },
-      { path: '/notifications', element: <Notifications /> },
-      { path: '/reports', element: <Reports /> },
-      { path: '/settings', element: <Settings /> },
+      {
+        element: <RequireModule />,
+        children: [
+          { path: '/', element: <Home /> },
+          { path: '/dashboard', element: <Dashboard /> },
+          { path: '/map', element: <Map /> },
+          { path: '/prediction', element: <Prediction /> },
+          { path: '/history', element: <History /> },
+          { path: '/notifications', element: <Notifications /> },
+          { path: '/reports', element: <Reports /> },
+          { path: '/settings', element: <Settings /> },
+        ],
+      },
     ],
   },
 ])

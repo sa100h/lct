@@ -10,30 +10,38 @@ import {
 } from '@ant-design/icons'
 import { Menu } from 'antd'
 import { useDispatch, useSelector } from 'react-redux'
-import { useNavigate } from 'react-router-dom'
+import { useLocation, useNavigate } from 'react-router-dom'
+import { getAllowedModules } from '@/auth/modules.js'
 import { setSelectedKey } from '@/store/menuSlice.js'
 
-const items = [
-  { key: '/', icon: <HomeOutlined />, label: 'Главная' },
-  { key: '/dashboard', icon: <DashboardOutlined />, label: 'Дашборд' },
-  { key: '/map', icon: <FullscreenOutlined />, label: 'Карта' },
-  { key: '/prediction', icon: <CloudOutlined />, label: 'Прогноз' },
-  { key: '/history', icon: <HistoryOutlined />, label: 'История' },
-  { key: '/notifications', icon: <NotificationOutlined />, label: 'Уведомления' },
-  { key: '/reports', icon: <FileTextOutlined />, label: 'Отчеты' },
-  { key: '/settings', icon: <SettingOutlined />, label: 'Настройки' },
-]
+const ICONS = {
+  '/': <HomeOutlined />,
+  '/dashboard': <DashboardOutlined />,
+  '/map': <FullscreenOutlined />,
+  '/prediction': <CloudOutlined />,
+  '/history': <HistoryOutlined />,
+  '/notifications': <NotificationOutlined />,
+  '/reports': <FileTextOutlined />,
+  '/settings': <SettingOutlined />,
+}
 
 export default function Sidebar() {
   const dispatch = useDispatch()
   const navigate = useNavigate()
-  const { collapsed, selectedKey } = useSelector((state) => state.menu)
+  const location = useLocation()
+  const { collapsed } = useSelector((state) => state.menu)
+  const permissions = useSelector((state) => state.auth.permissions)
+  const items = getAllowedModules(permissions).map((module) => ({
+    key: module.path,
+    icon: ICONS[module.path],
+    label: module.label,
+  }))
 
   return (
     <Menu
       mode="inline"
       inlineCollapsed={collapsed}
-      selectedKeys={[selectedKey]}
+      selectedKeys={[location.pathname]}
       items={items}
       onClick={({ key }) => {
         dispatch(setSelectedKey(key))

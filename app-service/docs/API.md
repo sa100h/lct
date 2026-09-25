@@ -12,7 +12,14 @@ JSON: `Content-Type: application/json`, имена полей **camelCase**.
 
 По умолчанию все эндпоинты требуют JWT (`Authorization: Bearer <accessToken>`), кроме явно анонимных. Access-токен живёт **5 минут**. Refresh — httpOnly-cookie `lct_refresh` (path `/api/app/auth`, `Secure`, `SameSite=Strict`).
 
-Роли AD (сейчас у всех право `demo.access`): `admin`, `technician`, `dispatcher_ods`, `dispatcher_district`.
+Роли AD и права UI (`RoleAccess:Roles` в `appsettings.json`): у всех есть `demo.access`. Модули веба — `module.*`:
+
+| Роль JWT | `module.*` |
+|---|---|
+| `admin` | home, dashboard, map, prediction, history, notifications, reports, settings |
+| `technician` | home, map, prediction, history |
+| `dispatcher_ods` | home, dashboard, map, notifications, reports |
+| `dispatcher_district` | home, map, notifications |
 
 В поле `login` — `sAMAccountName` без домена. Демо-учётки создаёт `ad/init/01-users-groups.sh` (стенд, не для продакшена):
 
@@ -315,7 +322,7 @@ curl -k -X POST https://localhost/api/app/predict \
 ```json
 {
   "role": "technician",
-  "permissions": ["demo.access"]
+  "permissions": ["demo.access", "module.home", "module.map", "module.prediction", "module.history"]
 }
 ```
 

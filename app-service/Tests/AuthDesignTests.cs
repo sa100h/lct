@@ -28,14 +28,55 @@ public sealed class AuthDesignTests
         Assert.False(catalog.TryResolveRole(
             ["CN=Admins,OU=Groups,DC=lct,DC=ru", "CN=Technics,OU=Groups,DC=lct,DC=ru"], out _));
         Assert.False(catalog.TryResolveRole(["CN=Domain Users,CN=Users,DC=lct,DC=ru"], out _));
-        Assert.Equal([PermissionCodes.DemoAccess], catalog.GetPermissions("technician"));
+        Assert.Equal(
+            [
+                PermissionCodes.DemoAccess,
+                PermissionCodes.ModuleHome,
+                PermissionCodes.ModuleMap,
+                PermissionCodes.ModulePrediction,
+                PermissionCodes.ModuleHistory
+            ],
+            catalog.GetPermissions("technician"));
     }
 
     private static RoleAccessCatalog CreateCatalog() => new RoleAccessCatalog(
     [
-        new RoleDefinition("admin", "CN=Admins,OU=Groups,DC=lct,DC=ru", [PermissionCodes.DemoAccess]),
-        new RoleDefinition("technician", "CN=Technics,OU=Groups,DC=lct,DC=ru", [PermissionCodes.DemoAccess]),
-        new RoleDefinition("dispatcher_district", "CN=Dispetchers_rayon,OU=Groups,DC=lct,DC=ru", [PermissionCodes.DemoAccess])
+        new RoleDefinition("admin", "CN=Admins,OU=Groups,DC=lct,DC=ru",
+        [
+            PermissionCodes.DemoAccess,
+            PermissionCodes.ModuleHome,
+            PermissionCodes.ModuleDashboard,
+            PermissionCodes.ModuleMap,
+            PermissionCodes.ModulePrediction,
+            PermissionCodes.ModuleHistory,
+            PermissionCodes.ModuleNotifications,
+            PermissionCodes.ModuleReports,
+            PermissionCodes.ModuleSettings
+        ]),
+        new RoleDefinition("technician", "CN=Technics,OU=Groups,DC=lct,DC=ru",
+        [
+            PermissionCodes.DemoAccess,
+            PermissionCodes.ModuleHome,
+            PermissionCodes.ModuleMap,
+            PermissionCodes.ModulePrediction,
+            PermissionCodes.ModuleHistory
+        ]),
+        new RoleDefinition("dispatcher_ods", "CN=Dispetchers_ODS,OU=Groups,DC=lct,DC=ru",
+        [
+            PermissionCodes.DemoAccess,
+            PermissionCodes.ModuleHome,
+            PermissionCodes.ModuleDashboard,
+            PermissionCodes.ModuleMap,
+            PermissionCodes.ModuleNotifications,
+            PermissionCodes.ModuleReports
+        ]),
+        new RoleDefinition("dispatcher_district", "CN=Dispetchers_rayon,OU=Groups,DC=lct,DC=ru",
+        [
+            PermissionCodes.DemoAccess,
+            PermissionCodes.ModuleHome,
+            PermissionCodes.ModuleMap,
+            PermissionCodes.ModuleNotifications
+        ])
     ]);
 
     [Fact]
@@ -70,6 +111,8 @@ public sealed class AuthDesignTests
             Assert.Equal("dispatcher_district", jwt.Claims.Single(c => c.Type == JwtClaimNames.Role).Value);
             Assert.Equal("dispetcher_rayon", jwt.Claims.Single(c => c.Type == JwtClaimNames.Login).Value);
             Assert.Contains(jwt.Claims, c => c.Type == JwtClaimNames.Permission && c.Value == PermissionCodes.DemoAccess);
+            Assert.Contains(jwt.Claims, c => c.Type == JwtClaimNames.Permission && c.Value == PermissionCodes.ModuleHome);
+            Assert.DoesNotContain(jwt.Claims, c => c.Type == JwtClaimNames.Permission && c.Value == PermissionCodes.ModuleSettings);
             using var payload = JsonDocument.Parse(jwt.Payload.SerializeToJson());
             Assert.Equal(JsonValueKind.Array,
                 payload.RootElement.GetProperty(JwtClaimNames.Permission).ValueKind);
@@ -125,5 +168,61 @@ public sealed class AuthDesignTests
             () => PermissionPolicyValidationExtensions.EnsureConfigured([endpoint], catalog));
         Assert.Contains(PermissionCodes.DemoAccess, error.Message);
         Assert.Contains("AuthzDemoController.Get", error.Message);
+    }
+
+    [Fact]
+    public void RoleAccessCatalog_ModulePermissionsMatchMatrixA()
+    {
+        var catalog = CreateCatalog();
+        Assert.Equal(
+            [
+                PermissionCodes.DemoAccess, PermissionCodes.ModuleHome, PermissionCodes.ModuleDashboard,
+                PermissionCodes.ModuleMap, PermissionCodes.ModulePrediction, PermissionCodes.ModuleHistory,
+                PermissionCodes.ModuleNotifications, PermissionCodes.ModuleReports, PermissionCodes.ModuleSettings
+            ],
+            catalog.GetPermissions("admin"));
+        Assert.Equal(
+            [
+                PermissionCodes.DemoAccess, PermissionCodes.ModuleHome, PermissionCodes.ModuleMap,
+                PermissionCodes.ModulePrediction, PermissionCodes.ModuleHistory
+            ],
+            catalog.GetPermissions("technician"));
+        Assert.Equal(
+            [
+                PermissionCodes.DemoAccess, PermissionCodes.ModuleHome, PermissionCodes.ModuleDashboard,
+                PermissionCodes.ModuleMap, PermissionCodes.ModuleNotifications, PermissionCodes.ModuleReports
+            ],
+            catalog.GetPermissions("dispatcher_ods"));
+        Assert.Equal(
+            [
+                PermissionCodes.DemoAccess, PermissionCodes.ModuleHome, PermissionCodes.ModuleMap,
+                PermissionCodes.ModuleNotifications
+            ],
+            catalog.GetPermissions("dispatcher_district"));
+    }
+
+    [Fact]
+    public void AppSettings_RoleAccessMatchesMatrixA()
+    {
+        var path = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "appsettings.json"));
+        using var doc = JsonDocument.Parse(File.ReadAllText(path));
+        var roles = doc.RootElement.GetProperty("RoleAccess").GetProperty("Roles");
+        string[] Read(string code) =>
+            roles.EnumerateArray().Single(r => r.GetProperty("Code").GetString() == code)
+                .GetProperty("Permissions").EnumerateArray().Select(v => v.GetString()!).ToArray();
+
+        Assert.Equal(
+            ["demo.access", "module.home", "module.dashboard", "module.map", "module.prediction",
+             "module.history", "module.notifications", "module.reports", "module.settings"],
+            Read("admin"));
+        Assert.Equal(
+            ["demo.access", "module.home", "module.map", "module.prediction", "module.history"],
+            Read("technician"));
+        Assert.Equal(
+            ["demo.access", "module.home", "module.dashboard", "module.map", "module.notifications", "module.reports"],
+            Read("dispatcher_ods"));
+        Assert.Equal(
+            ["demo.access", "module.home", "module.map", "module.notifications"],
+            Read("dispatcher_district"));
     }
 }
