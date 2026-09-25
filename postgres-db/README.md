@@ -44,3 +44,22 @@ app-service (`shared/DatabaseMigration/PostgresMigrator.cs`), idempotentно.
 ```bash
 docker compose exec postgres psql -U postgres -d app_db
 ```
+
+## Тестовые справочники для event feeder
+
+После запуска `postgres` можно заполнить справочники `engineering_systems`,
+`sensor_types`, `object_types`, `dispatcher_objects`, `sensor_statuses` и
+`sensor_channels` из CSV в `ml-data`:
+
+```bash
+python scripts/seed_event_feed_references.py --apply
+```
+
+Скрипт использует запущенный Compose-контейнер `postgres`, выполняет загрузку
+одной транзакцией и при повторном запуске не перезаписывает существующие строки.
+Без `--apply` он печатает SQL для просмотра. Это тестовая загрузка: координаты
+объектов устанавливаются в `0`, всем каналам задаётся статус «Неизвестно (тест)»,
+к одинаковым названиям добавляется ID, а для отсутствующего в CSV родителя
+`3831` создаётся помеченный тестовый объект. На момент подготовки скрипта CSV
+содержали 11 485 каналов. Ранее пропущенные worker-ом события загрузка
+справочников сама по себе не восстанавливает.
