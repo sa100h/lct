@@ -67,12 +67,14 @@ class Scheduler:
             )
             log.info("scheduled job", kind=job.kind, name=job.name, cron=job.cron_expr)
         self._sched.start()
+        log.debug("scheduler started", jobs=len(jobs))
 
     async def stop(self) -> None:
         if self._sched.running:
             self._sched.shutdown(wait=False)
         if self._retrain_tasks:
             await asyncio.gather(*self._retrain_tasks, return_exceptions=True)
+        log.debug("scheduler stopped")
 
     async def _dispatch(self, job: ScheduleRow) -> None:
         now = datetime.now(timezone.utc)

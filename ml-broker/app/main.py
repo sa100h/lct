@@ -139,6 +139,7 @@ class HealthServer:
             else:
                 body = b"not found"
                 status, reason = 404, "Not Found"
+                log.warning("health unknown path", path=path)
             resp = (
                 f"HTTP/1.1 {status} {reason}\r\n"
                 f"Content-Type: application/json\r\n"
@@ -147,8 +148,13 @@ class HealthServer:
             ).encode() + body
             writer.write(resp)
             await writer.drain()
-        except (asyncio.TimeoutError, ConnectionError):
-            pass
+        except asyncio.TimeoutError:
+            log.debug("health request timed out")
+        except (ConnectionError, OSError):
+            # client went away before/while we responded — benign
+            log.debug("health request dropped")
+        except Exception:  # noqa: BLE001 - surface unexpected handler errors
+            log.warning("health request failed", exc_info=True)
         finally:
             writer.close()
 
