@@ -14,6 +14,12 @@ Cleanliness rules (REPORT.md §7):
     n_events/n_alarm/state counts: gas (327.68 / negatives / >100 ppm) and
     thermal (-100..300 degC range);
   - cabinet/object joined from the channel reference (NaN for out-of-ref).
+Organizer answers (2026-09-24, справочник_состояний.csv + Q&A):
+  - 01.01.1970 03:00:0x value artifacts = date fault -> counted in n_fault1970
+    (new column) and never treated as binary 0/1;
+  - gas numeric = %volume methane, alarm threshold 1%, 5-15% = ignition band;
+    values outside the physical band -> fault, already excluded from num_*
+    via invalid_mask.
 """
 from __future__ import annotations
 
@@ -120,6 +126,9 @@ def agg_year(year: int) -> None:
         val = chunk["значение_датчика"].fillna("")
         alarm = tr.loc[chunk.index].isin(TRUE_TOKENS).astype(np.int32)
         num = pd.to_numeric(val, errors="coerce")
+        f1970 = val.str.startswith("01.01.1970").to_numpy(np.int32)
+        if f1970.any():
+            n_invalid += int(f1970.sum())
 
         # drop coding artifacts from numeric stats (REPORT.md §7): gas 327.68 /
         # negatives, thermal -3276 / 957..999 — they poison means and spreads
@@ -136,6 +145,7 @@ def agg_year(year: int) -> None:
                 "n_events": np.ones(len(chunk), np.int32),
                 "n_alarm": alarm.to_numpy(),
                 "n_num": num.notna().to_numpy(np.int32),
+                "n_fault1970": f1970,
                 "num_sum": num.fillna(0.0).to_numpy(np.float32),
                 "num_sumsq": (num ** 2).fillna(0.0).to_numpy(np.float32),
                 "num_min": num.to_numpy(np.float32),
@@ -150,6 +160,7 @@ def agg_year(year: int) -> None:
             n_events=("n_events", "sum"),
             n_alarm=("n_alarm", "sum"),
             n_num=("n_num", "sum"),
+            n_fault1970=("n_fault1970", "sum"),
             num_sum=("num_sum", "sum"),
             num_sumsq=("num_sumsq", "sum"),
             num_min=("num_min", "min"),
@@ -164,6 +175,7 @@ def agg_year(year: int) -> None:
         n_events=("n_events", "sum"),
         n_alarm=("n_alarm", "sum"),
         n_num=("n_num", "sum"),
+        n_fault1970=("n_fault1970", "sum"),
         num_sum=("num_sum", "sum"),
         num_sumsq=("num_sumsq", "sum"),
         num_min=("num_min", "min"),
@@ -172,7 +184,7 @@ def agg_year(year: int) -> None:
     ).reset_index()
     agg["channel"] = agg["channel"].astype(str)
     agg["day"] = agg["day"].astype(str)
-    for c in ["n_events", "n_alarm", "n_num"] + [f"s_{i}" for i in range(N_STATES)]:
+    for c in ["n_events", "n_alarm", "n_num", "n_fault1970"] + [f"s_{i}" for i in range(N_STATES)]:
         agg[c] = agg[c].astype(np.int32)
     for c in ["num_sum", "num_sumsq", "num_min", "num_max"]:
         agg[c] = agg[c].astype(np.float32)
@@ -200,6 +212,7 @@ def parts_total(frames: list[pd.DataFrame]) -> pd.DataFrame:
         n_events=("n_events", "sum"),
         n_alarm=("n_alarm", "sum"),
         n_num=("n_num", "sum"),
+        n_fault1970=("n_fault1970", "sum"),
         num_sum=("num_sum", "sum"),
         num_sumsq=("num_sumsq", "sum"),
         num_min=("num_min", "min"),

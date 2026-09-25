@@ -15,6 +15,9 @@ from typing import Any
 import asyncpg
 
 from .config import Config
+from .log import get_logger
+
+log = get_logger(__name__)
 
 
 def _as_features(value: Any) -> dict[str, float]:
@@ -65,10 +68,13 @@ class Db:
 
     @staticmethod
     async def connect(dsn: str) -> asyncpg.Pool:
-        return await asyncpg.create_pool(dsn, min_size=1, max_size=5)
+        pool = await asyncpg.create_pool(dsn, min_size=1, max_size=5)
+        log.debug("db pool ready")
+        return pool
 
     async def close(self) -> None:
         await self._pool.close()
+        log.debug("db pool closed")
 
     # -- startup -----------------------------------------------------------------
 
@@ -84,7 +90,9 @@ class Db:
                 """,
                 self._cfg.orphan_running_after_seconds,
             )
-            return int(res.rsplit(" ", 1)[-1]) if res else 0
+        recovered = int(res.rsplit(" ", 1)[-1]) if res else 0
+        log.debug("orphan scan", requeued=recovered)
+        return recovered
 
     # -- queue -------------------------------------------------------------------
 
@@ -238,6 +246,7 @@ class Db:
     async def load_schedule(self) -> list[ScheduleRow]:
         async with self._pool.acquire() as conn:
             rows = await conn.fetch("SELECT * FROM ml_schedule ORDER BY kind, name")
+        log.debug("schedule loaded", jobs=len(rows))
         return [
             ScheduleRow(
                 id=str(r["id"]),

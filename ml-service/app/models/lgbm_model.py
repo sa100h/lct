@@ -96,6 +96,7 @@ def stream_split(
     max_valid_rows: int = MAX_VALID_ROWS,
     seed: int = SEED,
     exclude_lags: bool = False,
+    spatial_path=None,
 ) -> dict:
     """Stream parquet twice -> train/valid/test arrays (memory-safe).
 
@@ -103,14 +104,37 @@ def stream_split(
     valid: years == valid_year (seeded subsample when over max_valid_rows) or None
     test:  years == test_year (always full — opened once at the end)
     Feature order = file column order minus META (lags included unless
-    exclude_lags). Returns: names, Xtr, ytr, Xva|None, yva|None, Xte, yte, n.
+    exclude_lags), plus spatial columns appended when spatial_path is set.
+    spatial_path: parquet with channel + day keys (spatial.parquet); left-joined
+    row-group by row-group, NaN where no match (LightGBM handles NaN).
+    Returns: names, Xtr, ytr, Xva|None, yva|None, Xte, yte, n, spatial.
     """
     import pyarrow as pa
     import pyarrow.parquet as pq
 
     pf = pq.ParquetFile(parquet_path)
     names = feature_columns(parquet_path, exclude_lags=exclude_lags)
-    ncol = len(names)
+
+    # Spatial join: sorted composite keys + float32 column arrays, built once.
+    sp_names: list[str] = []
+    sp_keys: np.ndarray | None = None
+    sp_cols: dict | None = None
+    if spatial_path is not None:
+        import pandas as pd
+
+        sp_schema = [c for c in pq.ParquetFile(spatial_path).schema_arrow.names]
+        sp_names = [c for c in sp_schema if c not in ("channel", "day", "year")]
+        sdf = pd.read_parquet(spatial_path)
+        keys = np.array(
+            [f"{c}|{str(d)[:10]}" for c, d in zip(sdf["channel"], sdf["day"])],
+            dtype=object,
+        )
+        order = np.argsort(keys, kind="stable")
+        sp_keys = keys[order]
+        sp_cols = {c: np.asarray(sdf[c][order], dtype=np.float32) for c in sp_names}
+        del sdf, keys, order
+
+    ncol = len(names) + len(sp_names)
     n = pf.metadata.num_rows
 
     # pass 1: years only -> masks
@@ -170,6 +194,26 @@ def stream_split(
                 va_X[vi : vi + vn, j] = col[vmask[take]]
             if en:
                 te_X[ei : ei + en, j] = col[emask[take]]
+        if sp_names and sp_keys is not None and sp_cols is not None:
+            fch = sub.column("channel").to_pylist()
+            fdy = sub.column("day").to_pylist()
+            kkt = np.array([f"{c}|{str(d)[:10]}" for c, d in zip(fch, fdy)], dtype=object)
+            segs = (
+                (tr_X, ti, tmask[take], tn),
+                (va_X, vi, vmask[take], vn),
+                (te_X, ei, emask[take], en),
+            )
+            for buf, pos, sel, cnt in segs:
+                if buf is None or not cnt:
+                    continue
+                ks = kkt[sel]
+                idx = np.searchsorted(sp_keys, ks)
+                idx = np.minimum(idx, len(sp_keys) - 1)
+                hit = sp_keys[idx] == ks
+                for j, cn in enumerate(sp_names):
+                    vals = sp_cols[cn][idx]  # fancy index -> copy
+                    vals[~hit] = np.nan
+                    buf[pos : pos + cnt, len(names) + j] = vals
         if tn:
             tr_y[ti : ti + tn] = lab[tmask[take]]
         if vn and va_y is not None:
@@ -181,12 +225,14 @@ def stream_split(
         ei += en
         del rg, sub
 
+    all_names = names + sp_names
     return {
-        "names": names,
+        "names": all_names,
         "Xtr": tr_X, "ytr": tr_y,
         "Xva": va_X, "yva": va_y,
         "Xte": te_X, "yte": te_y,
         "n": int(n),
+        "spatial": bool(sp_names),
     }
 
 

@@ -6,12 +6,24 @@
 |---|---|
 | Прямо в app-service | `POST /auth/login` |
 | Через api-proxy | `POST /api/app/auth/login` |
+| Vite `pnpm dev` (`:5173`) | `POST /api/app/auth/login` (proxy снимает `/api/app`) |
 
 JSON: `Content-Type: application/json`, имена полей **camelCase**.
 
 По умолчанию все эндпоинты требуют JWT (`Authorization: Bearer <accessToken>`), кроме явно анонимных. Access-токен живёт **5 минут**. Refresh — httpOnly-cookie `lct_refresh` (path `/api/app/auth`, `Secure`, `SameSite=Strict`).
 
 Роли AD (сейчас у всех право `demo.access`): `admin`, `technician`, `dispatcher_ods`, `dispatcher_district`.
+
+В поле `login` — `sAMAccountName` без домена. Демо-учётки создаёт `ad/init/01-users-groups.sh` (стенд, не для продакшена):
+
+| Логин | Пароль | Группа AD | Роль JWT |
+|---|---|---|---|
+| `admin.test` | `Adm1n-test-2026` | Admins | `admin` |
+| `technik.test` | `Tech1-2026` | Technics | `technician` |
+| `dispetcher_ods` | `D1sp-2026` | Dispetchers_ODS | `dispatcher_ods` |
+| `dispetcher_rayon` | `D1sp-ray-2026` | Dispetchers_rayon | `dispatcher_district` |
+
+`lct-app-bind` — служебная учётка app-service для LDAP, в форму логина не подходит.
 
 ---
 
@@ -38,7 +50,7 @@ JSON: `Content-Type: application/json`, имена полей **camelCase**.
 
 Set-Cookie: `lct_refresh=<token>; HttpOnly; Secure; SameSite=Strict; Path=/api/app/auth`.
 
-Access JWT (полезная нагрузка): `sub` (user id), `sid` (семья сессии), `role`, `permissions` (массив строк), `jti`, `iat`, `iss`, `aud`, `exp`.
+Access JWT (полезная нагрузка): `sub` (user id), `sid` (семья сессии), `role`, `login` (sAMAccountName), `permissions` (массив строк), `jti`, `iat`, `iss`, `aud`, `exp`.
 
 **Пример**
 
@@ -46,7 +58,7 @@ Access JWT (полезная нагрузка): `sub` (user id), `sid` (семь
 curl -k -X POST https://localhost/api/app/auth/login \
   -H 'Content-Type: application/json' \
   -c cookies.txt \
-  -d '{"login":"ivanov","password":"secret"}'
+  -d '{"login":"admin.test","password":"Adm1n-test-2026"}'
 ```
 
 | Код | Когда |

@@ -71,6 +71,7 @@ class QueueWorker:
                 log.exception("drain iteration failed")
             if processed == 0:
                 self._stats["no_op_polls"] += 1
+                log.debug("drain no-op, queue empty", no_op_polls=self._stats["no_op_polls"])
 
     async def _drain_once(self) -> int:
         """Claim a batch and process every row. Returns rows processed."""

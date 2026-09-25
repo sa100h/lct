@@ -152,7 +152,7 @@ def build_category(cat: str, sen: pd.DataFrame, years: list[int],
     new_incident = (cat == "fire-risk")
 
     rng = np.random.default_rng(12345)
-    base_cols = ["n_events", "n_alarm", "n_num", "num_sum", "num_sumsq", "num_min", "num_max"]
+    base_cols = ["n_events", "n_alarm", "n_num", "n_fault1970", "num_sum", "num_sumsq", "num_min", "num_max"]
     s_cols = [f"s_{i}" for i in range(N_STATES)]
     # static per-channel references: channel id -> cabinet / object code, so the
     # model can learn cabinet- and object-level effects. Unmatched -> -1.
@@ -165,7 +165,8 @@ def build_category(cat: str, sen: pd.DataFrame, years: list[int],
 
     _feat_cols = (
         ["e7", "a7", "e30", "a30", "n7", "m7", "s7", "n30", "m30", "s30",
-         "act7", "act30", "ar7", "ar30", "since_act", "since_alar", "div30"]
+         "act7", "act30", "ar7", "ar30", "since_act", "since_alar", "div30",
+         "f7", "f30"]
         + (["rep_gap"] if new_incident else [])
         + ["month_sin", "month_cos", "dow", "cabinet", "object_code"]
         + [f"t7_{i}" for i in range(N_STATES)]
@@ -179,7 +180,7 @@ def build_category(cat: str, sen: pd.DataFrame, years: list[int],
         + ["night_share7", "peak_share7"]
     )
     feat_cols = _feat_cols
-    n_head = 18 if new_incident else 17
+    n_head = 20 if new_incident else 19
 
     tmp = FEAT / f".tmp-{cat}"
     if tmp.exists():
@@ -244,8 +245,14 @@ def build_category(cat: str, sen: pd.DataFrame, years: list[int],
             full = np.zeros((span, seg.shape[1]), np.float32)
             idx = np.searchsorted(np.arange(dd[0], dd[0] + span), dd)
             full[idx, :] = seg
+            # mat layout is [base_cols | s_0..s_N]: states start AFTER the
+            # len(base_cols) numeric columns. State features/labels below MUST
+            # index st[:, i], not full[:, i] — the former version read
+            # n_events/n_alarm/... shifted as "states" (t7_0 == e7 identity).
+            st = full[:, len(base_cols):]
             ev, al = full[:, 0], full[:, 1]
-            nn, nsum, nsq = full[:, 2], full[:, 3], full[:, 4]
+            nn, n1970, nsum, nsq = full[:, 2], full[:, 3], full[:, 4], full[:, 5]
+            nf7, nf30 = trail_sum(n1970, W7), trail_sum(n1970, W30)
 
             e7, a7 = trail_sum(ev, W7), trail_sum(al, W7)
             e30, a30 = trail_sum(ev, W30), trail_sum(al, W30)
@@ -283,7 +290,7 @@ def build_category(cat: str, sen: pd.DataFrame, years: list[int],
 
             crit_full = np.zeros(span, np.int8)
             for i in crit_idx:
-                crit_full = np.maximum(crit_full, (full[:, i] > 0).astype(np.int8))
+                crit_full = np.maximum(crit_full, (st[:, i] > 0).astype(np.int8))
             if new_incident:
                 # critical counts only when it began on day t: previous
                 # calendar day (t-1) within the same span was not critical.
@@ -294,8 +301,8 @@ def build_category(cat: str, sen: pd.DataFrame, years: list[int],
                 crit_full = ((crit_full > 0) & (prev_crit == 0)).astype(np.int8)
             label = np.maximum((al > 0).astype(np.int8), crit_full)
 
-            st7 = np.stack([trail_sum(full[:, i], W7) for i in range(N_STATES)], axis=1)
-            st30 = np.stack([trail_sum(full[:, i], W30) for i in range(N_STATES)], axis=1)
+            st7 = np.stack([trail_sum(st[:, i], W7) for i in range(N_STATES)], axis=1)
+            st30 = np.stack([trail_sum(st[:, i], W30) for i in range(N_STATES)], axis=1)
             div30 = (st30 > 0).sum(axis=1).astype(np.float32)
 
             # state transition counts: how many days within the window the
@@ -306,7 +313,7 @@ def build_category(cat: str, sen: pd.DataFrame, years: list[int],
             tr7 = np.empty((span, N_STATES), np.float32)
             tr14 = np.empty((span, N_STATES), np.float32)
             for i in range(N_STATES):
-                x = full[:, i] > 0
+                x = st[:, i] > 0
                 on = x.copy()
                 on[1:] = x[1:] & ~x[:-1]
                 onf = on.astype(np.float32)
@@ -325,15 +332,16 @@ def build_category(cat: str, sen: pd.DataFrame, years: list[int],
             age[had] = np.minimum(np.maximum((grid[had] - 1 - first_dd), 0), 999)
 
             feats = np.empty((span, len(feat_cols)), np.float32)
-            feats[:, 0:17] = np.stack(
+            feats[:, 0:19] = np.stack(
                 [e7, a7, e30, a30, cn7, m7, s7, cn30, m30, s30,
-                 act7, act30, ar7, ar30, since_act, since_alar, div30], axis=1
+                 act7, act30, ar7, ar30, since_act, since_alar, div30,
+                 nf7, nf30], axis=1
             )
             if new_incident:
-                feats[:, 17] = rep_gap
-                extra_start = 18
+                feats[:, 19] = rep_gap
+                extra_start = 20
             else:
-                extra_start = 17
+                extra_start = 19
             # seasonality (calendar, no leak: purely a function of day t) +
             # static per-channel cabinet/object codes (NaN -> -1)
             gdt = pd.to_datetime((dd[0] + np.arange(span)).astype(np.int64), unit="D")

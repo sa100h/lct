@@ -51,5 +51,6 @@ class Config:
     orphan_running_after_seconds: float = field(
         default_factory=lambda: float(os.environ.get("ORPHAN_RUNNING_AFTER_SECONDS", "600"))
     )
+    log_level: str = field(default_factory=lambda: os.environ.get("LOG_LEVEL", "INFO"))
     categories: tuple[str, ...] = _CATEGORIES
     listen_channel: str = field(default_factory=lambda: os.environ.get("LISTEN_CHANNEL", "ml_predict"))
