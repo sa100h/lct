@@ -22,12 +22,12 @@
 
 | Путь | Назначение |
 |------|-----------|
-| `Controllers/` | MVC-контроллеры для авторизации, статуса, прогноза и примера permission policy |
+| `Controllers/` | MVC-контроллеры для авторизации, статуса, запусков прогнозирования и примера permission policy |
 | `Contracts/` | API DTO для авторизации, статуса и прогнозов |
 | `Services/Domain/` | сценарии авторизации, каталог доступа и интерфейсы портов |
 | `Services/Infrastructure/` | LDAPS-клиент и проверка сертификата AD |
 | `Services/` | JWT и HTTP-клиент ml-service |
-| `Data/Repositories/` | Npgsql-репозиторий пользователей и refresh token |
+| `Data/Repositories/` | Npgsql-репозитории пользователей, refresh token, событий и журнала прогнозов |
 | `Models/` | внутренние модели авторизации |
 | `Extensions/` | регистрация зависимостей, политики доступа и запуск миграций |
 

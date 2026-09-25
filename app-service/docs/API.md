@@ -180,6 +180,42 @@ curl http://localhost:8080/health
 
 ---
 
+## Запуски прогнозирования
+
+### `POST /forecasts/run`
+
+Нужны JWT и permission `module.prediction`. Создаёт необработанную запись в `forecast_journal`. Эндпоинт пока
+не вызывает ML-сервис и не пишет в технические ML-таблицы. Значения
+`start_composition_time` и `end_composition_time` остаются `NULL`.
+
+**Тело**
+
+```json
+{
+  "dispatcherObjectIds": [20, 111]
+}
+```
+
+`dispatcherObjectIds: null` означает запуск для всех диспетчерских объектов.
+Пустой массив и неизвестные идентификаторы возвращают `400 Bad Request`.
+Повторяющиеся идентификаторы удаляются, итоговый список сортируется.
+
+**Ответ 202**
+
+```json
+{
+  "forecastJournalId": "2c059017-47c7-480a-b0a1-516be249695d",
+  "status": "pending",
+  "createdAt": "2026-09-25T10:30:00Z",
+  "dispatcherObjectIds": [20, 111]
+}
+```
+
+ID создателя берётся из `sub` текущего JWT. В `forecast_objects` сохраняется
+JSON-массив выбранных объектов либо SQL `NULL` для всех объектов.
+
+---
+
 ## ML через app-service
 
 ### `GET /ml/status`
@@ -351,6 +387,7 @@ curl -k https://localhost/api/app/authz/demo \
 | POST | `/auth/logout` | `/api/app/auth/logout` | cookie refresh (опц.) |
 | GET | `/status` | `/api/app/status` | нет |
 | GET | `/ml/status` | `/api/app/ml/status` | нет |
+| POST | `/forecasts/run` | `/api/app/forecasts/run` | Bearer + `module.prediction` |
 | POST | `/predict` | `/api/app/predict` | Bearer |
 | GET | `/authz/demo` | `/api/app/authz/demo` | Bearer + `demo.access` |
 | GET | `/health` | нет (напрямую :8080) | нет |

@@ -50,6 +50,12 @@ public sealed class StatusEndpointTests : IClassFixture<WebApplicationFactory<Pr
         using var predictBody = new StringContent("{}", Encoding.UTF8, "application/json");
         response = await client.PostAsync("/predict", predictBody, TestContext.Current.CancellationToken);
         Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+        using var forecastBody = new StringContent(
+            """{"dispatcherObjectIds":null}""",
+            Encoding.UTF8,
+            "application/json");
+        response = await client.PostAsync("/forecasts/run", forecastBody, TestContext.Current.CancellationToken);
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
         using var body = new StringContent("""{"login":"example","password":"example"}""", Encoding.UTF8, "application/json");
         response = await client.PostAsync("/auth/login", body, TestContext.Current.CancellationToken);
         Assert.Equal(HttpStatusCode.ServiceUnavailable, response.StatusCode);

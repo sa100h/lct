@@ -8,6 +8,7 @@ using AppService.Services;
 using AppService.Models;
 using AppService.Services.Infrastructure;
 using AppService.Extensions;
+using AppService.Controllers;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Shared.Authentication;
@@ -17,6 +18,16 @@ namespace AppService.Tests;
 
 public sealed class AuthDesignTests
 {
+    [Fact]
+    public void ForecastRun_RequiresModulePredictionPermission()
+    {
+        var method = typeof(ForecastsController).GetMethod(nameof(ForecastsController.Run));
+        var authorize = Assert.Single(method!.GetCustomAttributes(typeof(AuthorizeAttribute), inherit: true)
+            .Cast<AuthorizeAttribute>());
+
+        Assert.Equal(PermissionCodes.ModulePrediction, authorize.Policy);
+    }
+
     [Fact]
     public void RoleAccessCatalog_RequiresExactlyOneApplicationGroup()
     {
