@@ -9,7 +9,9 @@
 | `init/01-init.sql` | при первом старте (initdb) | создание базы `app_db` |
 | `init/02-init-create-user.sh` | при первом старте | пользователь `app_service` с паролем из `APP_DB_PASSWORD` |
 | `migrations/app_db/001_initialize.sql` | при каждом старте app-service | базовая схема |
-| `migrations/app_db/002_lct_domain.sql` | при каждом старте app-service | доменная схема: equipment, alarm_events, predictions, maintenance_requests |
+| `migrations/app_db/002_lct_domain.sql` | при каждом старте app-service | доменная схема: equipment, alarms, predictions, maintenance_requests |
+| `migrations/app_db/006_adding_default_tables.sql` | один раз через migrator | справочники датчиков и `events_log` |
+| `migrations/app_db/009_events_log_timestamp_with_time_zone.sql` | один раз через migrator | перевод времени событий в `TIMESTAMPTZ` |
 
 Скрипты из `init/` — штатный механизм Postgres (`/docker-entrypoint-initdb.d`),
 срабатывают только при пустом volume. Миграции из `migrations/` применяются самим
@@ -17,8 +19,8 @@ app-service (`shared/DatabaseMigration/PostgresMigrator.cs`), idempotentно.
 
 ## Схемы
 
-- **app_db**: `equipment`, `alarm_events`, `predictions`, `maintenance_requests`
-  (создано миграцией `002_lct_domain.sql`).
+- **app_db**: бизнес-таблицы приложения, включая `equipment`, `alarms`,
+  `events_log`, `predictions` и `maintenance_requests`.
 - Диаграммы ER и ролей — в каталоге `docs/`.
 
 ## Настройки

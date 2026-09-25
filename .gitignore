@@ -25,6 +25,7 @@ __pycache__/
 ml-data/*
 !ml-data/.gitkeep
 ext-journal-*.7z
+archive-*.zip
 
 
 #ignore files drawio

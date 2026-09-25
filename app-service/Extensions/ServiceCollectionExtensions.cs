@@ -60,7 +60,8 @@ public static class ServiceCollectionExtensions
                 client.BaseAddress = new Uri(eventFeed.BaseUrl);
                 client.Timeout = eventFeed.RequestTimeout;
             });
-            services.AddSingleton<IEventBatchHandler, LoggingEventBatchHandler>();
+            services.AddSingleton<IEventLogRepository>(_ => new NpgsqlEventLogRepository(connectionString));
+            services.AddSingleton<IEventBatchHandler, PersistingEventBatchHandler>();
             services.AddHostedService<EventFeedPollingWorker>();
         }
         return services;

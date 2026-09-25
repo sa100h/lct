@@ -7,8 +7,11 @@
 
 При `EventFeed:Enabled=true` фоновый `EventFeedPollingWorker` каждые пять минут
 запрашивает у `test-event-feeder` последние семь минут. Двухминутное перекрытие
-устраняется в памяти по исходному ID события. Пока обработчик только пишет
-сводную информацию в лог и не обращается к БД.
+устраняется в памяти по исходному ID события. События с известными каналами
+идемпотентно записываются в `events_log` по исходному ID, после чего обработчик
+пишет сводную информацию в лог. В `event_datetime` сохраняется `OccurredAt`
+как `TIMESTAMPTZ`. События неизвестных `sensor_channels` пропускаются с одним
+агрегированным предупреждением на пачку и считаются обработанными.
 
 Настройки находятся в секции `EventFeed`: `BaseUrl`, `PollInterval`,
 `RetryInterval`, `Lookback`, `PageSize` и `RequestTimeout`. Недоступность feeder
@@ -33,8 +36,10 @@
 - БД: `app_db` на postgres:18. Пользователь `app_service` создаётся
   `postgres-db/init/02-init-create-user.sh`.
 - Миграции применяются при старте контейнером из `./postgres-db/migrations`
-  (монтируется в `/migrations`): `001_initialize.sql`, `002_lct_domain.sql`,
-  `003_auth.sql` (таблицы `users` и `refresh_tokens`).
+  (монтируется в `/migrations`): последовательно от `001_initialize.sql` до
+  `009_events_log_timestamp_with_time_zone.sql`; `003_auth.sql` создаёт таблицы
+  `users` и `refresh_tokens`, а `006` и `009` — журнал событий и его временную
+  семантику.
   Механика — `shared/DatabaseMigration/PostgresMigrator.cs`.
 
 ## Настройки
