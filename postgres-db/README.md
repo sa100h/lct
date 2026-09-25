@@ -12,6 +12,11 @@
 | `migrations/app_db/002_lct_domain.sql` | при каждом старте app-service | доменная схема: equipment, alarms, predictions, maintenance_requests |
 | `migrations/app_db/006_adding_default_tables.sql` | один раз через migrator | справочники датчиков и `events_log` |
 | `migrations/app_db/009_events_log_timestamp_with_time_zone.sql` | один раз через migrator | перевод времени событий в `TIMESTAMPTZ` |
+| `migrations/app_db/015_allow_duplicate_dictionary_names.sql` | один раз через migrator | разрешает одинаковые отображаемые названия объектов и каналов |
+| `migrations/app_db/016_1_add_data_dictionary.sql` | один раз через migrator | тестовые объекты, типы и статусы датчиков |
+| `migrations/app_db/016_2_add_data_dictionary_channels.sql` | один раз через migrator | тестовые каналы датчиков |
+| `migrations/app_db/017_add_data_dictionary.sql` | один раз через migrator | тестовый статус заявки |
+| `migrations/app_db/018_dispatcher_object_coordinates.sql` | один раз через migrator | раздельные `latitude`/`longitude` и тестовые координаты |
 
 Скрипты из `init/` — штатный механизм Postgres (`/docker-entrypoint-initdb.d`),
 срабатывают только при пустом volume. Миграции из `migrations/` применяются самим
@@ -57,8 +62,8 @@ python scripts/seed_event_feed_references.py --apply
 
 Скрипт использует запущенный Compose-контейнер `postgres`, выполняет загрузку
 одной транзакцией и при повторном запуске не перезаписывает существующие строки.
-Без `--apply` он печатает SQL для просмотра. Это тестовая загрузка: координаты
-объектов устанавливаются в `0`, всем каналам задаётся статус «Неизвестно (тест)»,
+Без `--apply` он печатает SQL для просмотра. Это тестовая загрузка: объектам
+назначаются детерминированные координаты в пределах Москвы, всем каналам задаётся статус «Неизвестно (тест)»,
 к одинаковым названиям добавляется ID, а для отсутствующего в CSV родителя
 `3831` создаётся помеченный тестовый объект. На момент подготовки скрипта CSV
 содержали 11 485 каналов. Ранее пропущенные worker-ом события загрузка

@@ -40,9 +40,11 @@ public static class ServiceCollectionExtensions
         services.AddSingleton(cookie);
 
         services.AddSingleton<IAuthRepository>(_ => new NpgsqlAuthRepository(connectionString));
+        services.AddSingleton<IDispatcherObjectRepository>(_ => new NpgsqlDispatcherObjectRepository(connectionString));
         services.AddSingleton<IForecastJournalRepository>(_ => new NpgsqlForecastJournalRepository(connectionString));
         services.AddSingleton<ITokenIssuer, JwtTokenIssuer>();
         services.AddScoped<IAuthSessionService, AuthSessionService>();
+        services.AddScoped<IDispatcherObjectQueryService, DispatcherObjectQueryService>();
         services.AddScoped<IForecastRunService, ForecastRunService>();
         services.AddSingleton<PostgresMigrator>();
         services.AddHostedService<AppMigrationHostedService>();

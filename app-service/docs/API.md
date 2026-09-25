@@ -180,6 +180,38 @@ curl http://localhost:8080/health
 
 ---
 
+## Диспетчерские объекты
+
+### `GET /dispatcher_objects`
+
+Нужны JWT и permission `module.map`. Возвращает все диспетчерские объекты с
+расшифрованным типом, координатами WGS 84 и агрегированными статусами каналов.
+Для каждого объекта `statuses` и `channelCount` учитывают его собственные
+каналы и каналы всех вложенных объектов на любом уровне иерархии.
+
+**Ответ 200**
+
+```json
+[
+  {
+    "id": 5,
+    "parentId": 5773,
+    "name": "объект Альфа",
+    "objectTypeId": 2,
+    "objectTypeName": "controlHouse",
+    "longitude": 37.5,
+    "latitude": 55.61,
+    "statuses": ["Норма"],
+    "channelCount": 42
+  }
+]
+```
+
+Объект без связанных каналов получает пустой массив `statuses` и
+`channelCount: 0`.
+
+---
+
 ## Запуски прогнозирования
 
 ### `POST /forecasts/run`
@@ -386,6 +418,7 @@ curl -k https://localhost/api/app/authz/demo \
 | POST | `/auth/refresh` | `/api/app/auth/refresh` | cookie refresh |
 | POST | `/auth/logout` | `/api/app/auth/logout` | cookie refresh (опц.) |
 | GET | `/status` | `/api/app/status` | нет |
+| GET | `/dispatcher_objects` | `/api/app/dispatcher_objects` | Bearer + `module.map` |
 | GET | `/ml/status` | `/api/app/ml/status` | нет |
 | POST | `/forecasts/run` | `/api/app/forecasts/run` | Bearer + `module.prediction` |
 | POST | `/predict` | `/api/app/predict` | Bearer |

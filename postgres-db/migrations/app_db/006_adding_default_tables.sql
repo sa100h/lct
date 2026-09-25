@@ -27,7 +27,7 @@ CREATE TABLE dispatcher_objects (
 	hierarchy_level INT NOT NULL, -- 'Уровень иерархии объекта',
 	parent_id INT NULL, -- 'ID родительского объекта',
 	object_type_id INT NOT NULL, -- 'ID вида объекта',
-	dispatcher_object_name TEXT NOT NULL UNIQUE, -- 'Диспетчерское название объекта',
+	dispatcher_object_name TEXT NOT NULL, -- 'Диспетчерское название объекта',
 	coordinates DOUBLE PRECISION  NOT NULL, -- 'Координаты объекта',
 
 	CONSTRAINT fk__dispatcher_objects__dispatcher_objects__parent_id__id 
@@ -53,7 +53,7 @@ CREATE TABLE sensor_statuses (
 CREATE TABLE sensor_channels (
     id INT PRIMARY KEY,
     sensor_type_id INT NOT NULL,  -- 'ID типа датчика',
-    sensor_name TEXT NOT NULL UNIQUE, -- 'Имя/метка конкретного датчика',
+    sensor_name TEXT NOT NULL, -- 'Имя/метка конкретного датчика',
     dispatcher_object_id INT NOT NULL,  -- 'ID объекта, к которому привязан датчик',
     sensor_status_id INT NOT NULL, -- 'Текущий статус датчика',
     

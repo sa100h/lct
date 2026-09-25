@@ -27,6 +27,41 @@ MISSING_PARENT_ID = 3831
 UNKNOWN_STATUS_ID = 0
 BATCH_SIZE = 500
 
+ENGINEERING_SYSTEM_IDS = {
+    "Охранная подсистема": 1,
+    "Пожарная охрана": 2,
+    "Температурная подсистема": 3,
+    "Диспетчерский контроль": 4,
+    "Газовая охрана": 5,
+    "Диагностическая подсистема": 6,
+}
+OBJECT_TYPE_IDS = {
+    "district": 1,
+    "controlHouse": 2,
+    "guardObject": 3,
+}
+SENSOR_TYPE_IDS = {
+    "9-секционный люк": 1,
+    "Датчик движения": 2,
+    "КД АВ": 3,
+    "КД Дверь": 4,
+    "КД Люк": 5,
+    "Стекло": 6,
+    "Датчик дыма": 7,
+    "Ручной извещатель": 8,
+    "Состояние УИР-Р": 9,
+    "Тепловой датчик": 10,
+    "Датчик температуры": 11,
+    "Датчик затопления": 12,
+    "Переключатель": 13,
+    "Состояние вентилятора": 14,
+    "Состояние насоса": 15,
+    "Состояние охраны": 16,
+    "Состояние фазы": 17,
+    "Газовый датчик": 18,
+    "ИБП": 19,
+}
+
 
 def read_csv(path: Path, expected_columns: tuple[str, ...]) -> list[dict[str, str]]:
     with path.open(encoding="utf-8-sig", newline="") as stream:
@@ -53,6 +88,13 @@ def sql_int(value: str, label: str) -> int:
 def require_unique(values: list[int] | list[str], label: str) -> None:
     if len(values) != len(set(values)):
         raise ValueError(f"Duplicate {label} in source data")
+
+
+def test_coordinates(object_id: int) -> tuple[str, str]:
+    """Return deterministic WGS 84 test coordinates within Moscow."""
+    latitude = 55.60 + ((object_id // 40) % 30) * 0.01
+    longitude = 37.45 + (object_id % 40) * 0.01
+    return f"{latitude:.6f}", f"{longitude:.6f}"
 
 
 def insert_rows(table: str, columns: tuple[str, ...], rows: list[tuple[str, ...]]) -> None:
@@ -162,26 +204,27 @@ def main() -> None:
     object_types = sorted({row["вид_объекта"].strip() for row in objects.values()})
     if not all(object_types):
         raise ValueError("Empty object type name")
-    system_ids = {name: index for index, name in enumerate(systems, start=1)}
-    sensor_type_ids = {
-        name: index for index, name in enumerate(sorted(sensor_type_system), start=1)
-    }
-    object_type_ids = {name: index for index, name in enumerate(object_types, start=1)}
+    if set(systems) != set(ENGINEERING_SYSTEM_IDS):
+        raise ValueError("Engineering systems differ from the database dictionary")
+    if set(sensor_type_system) != set(SENSOR_TYPE_IDS):
+        raise ValueError("Sensor types differ from the database dictionary")
+    if set(object_types) != set(OBJECT_TYPE_IDS):
+        raise ValueError("Object types differ from the database dictionary")
 
     print("BEGIN;")
     insert_rows(
         "engineering_systems",
         ("id", "name"),
-        [(str(system_ids[name]), sql_text(name)) for name in systems],
+        [(str(ENGINEERING_SYSTEM_IDS[name]), sql_text(name)) for name in systems],
     )
     insert_rows(
         "sensor_types",
         ("id", "name", "engineering_system_id"),
         [
             (
-                str(sensor_type_ids[name]),
+                str(SENSOR_TYPE_IDS[name]),
                 sql_text(name),
-                str(system_ids[sensor_type_system[name]]),
+                str(ENGINEERING_SYSTEM_IDS[sensor_type_system[name]]),
             )
             for name in sorted(sensor_type_system)
         ],
@@ -189,24 +232,26 @@ def main() -> None:
     insert_rows(
         "object_types",
         ("id", "name"),
-        [(str(object_type_ids[name]), sql_text(name)) for name in object_types],
+        [(str(OBJECT_TYPE_IDS[name]), sql_text(name)) for name in object_types],
     )
     for object_id, row in ordered_objects(objects):
         parent = row["родитель"].strip()
+        latitude, longitude = test_coordinates(object_id)
         insert_rows(
             "dispatcher_objects",
             (
                 "id", "hierarchy_level", "parent_id", "object_type_id",
-                "dispatcher_object_name", "coordinates",
+                "dispatcher_object_name", "latitude", "longitude",
             ),
             [
                 (
                     str(object_id),
                     str(sql_int(row["иерархия_уровень"], "hierarchy level")),
                     str(sql_int(parent, "parent ID")) if parent else "NULL",
-                    str(object_type_ids[row["вид_объекта"].strip()]),
-                    sql_text(f"{row['диспетчерское_название_объекта'].strip()} [id:{object_id}]"),
-                    "0.0",
+                    str(OBJECT_TYPE_IDS[row["вид_объекта"].strip()]),
+                    sql_text(row["диспетчерское_название_объекта"].strip()),
+                    latitude,
+                    longitude,
                 )
             ],
         )
@@ -221,8 +266,8 @@ def main() -> None:
         [
             (
                 str(channel_id),
-                str(sensor_type_ids[row["тип_датчика"].strip()]),
-                sql_text(f"{row['название_датчика'].strip()} [id:{channel_id}]"),
+                str(SENSOR_TYPE_IDS[row["тип_датчика"].strip()]),
+                sql_text(row["название_датчика"].strip()),
                 str(sql_int(row["ид_объект"], "channel object ID")),
                 str(UNKNOWN_STATUS_ID),
             )
@@ -237,7 +282,7 @@ def main() -> None:
     )
     print(
         f"Prepared test reference seed: {len(systems)} systems, "
-        f"{len(sensor_type_ids)} sensor types, {len(object_types)} object types, "
+        f"{len(SENSOR_TYPE_IDS)} sensor types, {len(object_types)} object types, "
         f"{len(objects)} objects, {len(channels)} channels",
         file=sys.stderr,
     )

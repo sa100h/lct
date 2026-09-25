@@ -19,6 +19,16 @@ namespace AppService.Tests;
 public sealed class AuthDesignTests
 {
     [Fact]
+    public void DispatcherObjects_RequiresModuleMapPermission()
+    {
+        var method = typeof(DispatcherObjectsController).GetMethod(nameof(DispatcherObjectsController.GetAll));
+        var authorize = Assert.Single(method!.GetCustomAttributes(typeof(AuthorizeAttribute), inherit: true)
+            .Cast<AuthorizeAttribute>());
+
+        Assert.Equal(PermissionCodes.ModuleMap, authorize.Policy);
+    }
+
+    [Fact]
     public void ForecastRun_RequiresModulePredictionPermission()
     {
         var method = typeof(ForecastsController).GetMethod(nameof(ForecastsController.Run));

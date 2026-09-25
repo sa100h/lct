@@ -1,6 +1,6 @@
 -- Статусы заявок
 -- 		'Название статуса заявки (например, "Новая", "В работе", "Закрыта")'
-INSERT INTO sensor_statuses (id, name)
-	   VALUES				(1,  'Новая'),
+INSERT INTO request_statuses (id, name)
+	   VALUES ('00000000-0000-0000-0000-000000000001', 'Новая');
 
 
