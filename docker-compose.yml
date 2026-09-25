@@ -227,7 +227,7 @@ services:
     security_opt: ["no-new-privileges:true"]
     depends_on:
       postgres: { condition: service_healthy }
-      ml-service: { condition: service_started }
+      ml-service: { condition: service_healthy }
     restart: unless-stopped
     networks: [app-network]
 

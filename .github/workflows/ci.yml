@@ -77,12 +77,32 @@ jobs:
         include:
           - image: api-proxy
             dockerfile: api-proxy/Dockerfile
+            python_smoke: false
           - image: app-service
             dockerfile: app-service/Dockerfile
+            python_smoke: false
           - image: ml-service
             dockerfile: ml-service/Dockerfile
+            python_smoke: true
+          - image: ml-broker
+            dockerfile: ml-broker/Dockerfile
+            python_smoke: true
     steps:
       - uses: actions/checkout@v4
       - name: Build image
         run: docker build --file ${{ matrix.dockerfile }} --tag service-template/${{ matrix.image }}:ci-${{ github.sha }} .
+      # Container-build correctness (Python images): the entrypoint is
+      # overridden, so this proves the baked image boots python and the app
+      # package imports cleanly (catches bad COPY paths, missing deps, and
+      # Python-version drift) without needing the service's external
+      # dependencies (DB, peer services). The app package lives at /app/app.
+      - name: Smoke (boot python + import app inside built image)
+        if: matrix.python_smoke
+        run: |
+          docker run --rm --entrypoint python \
+            service-template/${{ matrix.image }}:ci-${{ github.sha }} \
+            -c "import compileall,sys; sys.exit(0 if compileall.compile_dir('app', quiet=2) else 1)"
+          docker run --rm --entrypoint python \
+            service-template/${{ matrix.image }}:ci-${{ github.sha }} \
+            -c "import app.main"
 
