@@ -132,13 +132,12 @@ services:
       context: .
       dockerfile: api-proxy/Dockerfile
       target: local
-      # args:
-      #   VITE_YANDEX_MAPS_API_KEY: ${VITE_YANDEX_MAPS_API_KEY}
+      args:
+        VITE_YANDEX_MAPS_API_KEY: ${VITE_YANDEX_MAPS_API_KEY}
     ports: ["${API_PROXY_HTTP_PORT:-80}:8080", "${API_PROXY_HTTPS_PORT:-443}:8443"]
     environment:
       ASPNETCORE_ENVIRONMENT: Development
       ASPNETCORE_HTTPS_PORT: ${API_PROXY_HTTPS_PORT:-443}
-      VITE_YANDEX_MAPS_API_KEY: ${VITE_YANDEX_MAPS_API_KEY}
       Kestrel__Endpoints__Http__Url: http://+:8080
       Kestrel__Endpoints__Https__Url: https://+:8443
       Kestrel__Endpoints__Https__Certificate__Path: /https/fullchain.pem
