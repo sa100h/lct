@@ -31,3 +31,5 @@ archive-*.zip
 #ignore files drawio
 docs/diagram/*.bkp
 
+# Docker
+docker-compose.yml
