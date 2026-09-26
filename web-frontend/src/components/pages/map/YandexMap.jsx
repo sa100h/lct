@@ -10,10 +10,12 @@ const SCHEME_WITHOUT_POI = [
   },
 ]
 
+const DEFAULT_CENTER = [37.6173, 55.7558]
+
 export default function YandexMap({ apikey, markers, selectedId, onSelect, onError }) {
   const [mapApi, setMapApi] = useState(null)
   const selected = useMemo(
-    () => markers.find((item) => item.id === selectedId) ?? markers[0],
+    () => markers.find((item) => item.id === selectedId) ?? null,
     [markers, selectedId],
   )
 
@@ -63,7 +65,7 @@ export default function YandexMap({ apikey, markers, selectedId, onSelect, onErr
 
   return (
     <div className="map-canvas">
-      <YMap location={{ center: selected.coordinates, zoom: 11 }}>
+      <YMap location={{ center: selected ? selected.coordinates : DEFAULT_CENTER, zoom: 11 }}>
         <YMapDefaultSchemeLayer customization={SCHEME_WITHOUT_POI} />
         <YMapFeatureDataSource id="collectors" />
         <YMapLayer source="collectors" type="markers" zIndex={1800} />
