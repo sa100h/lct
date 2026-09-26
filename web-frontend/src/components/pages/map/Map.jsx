@@ -131,7 +131,6 @@ export default function MapPage() {
             <Tree
               className="map-tree"
               blockNode
-              showLine={{ showLeafIcon: false }}
               treeData={treeData}
               selectedKeys={selectedId == null ? [] : [String(selectedId)]}
               expandedKeys={expandedKeys}
