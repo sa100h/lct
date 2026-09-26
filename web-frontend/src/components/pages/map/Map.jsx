@@ -4,6 +4,7 @@ import { AuthHttpError } from '@/api/auth.js'
 import { listDispatcherObjects } from '@/api/dispatcherObjects.js'
 import { buildObjectTree } from '@/components/pages/prediction/buildObjectTree.js'
 import { ancestorKeys, rootExpandedKeys, toMapMarkers } from './mapTreeKeys.js'
+import { formatObjectCount } from '@/components/objectTree/formatObjectCount.js'
 import YandexMap from './YandexMap.jsx'
 import './Map.css'
 
@@ -12,18 +13,6 @@ const MISSING_KEY_TEXT =
 
 const LOAD_ERROR_TEXT =
   'Не удалось загрузить Яндекс.Карты. Проверьте ключ, сеть и ограничения ключа по HTTP Referrer.'
-
-function formatObjectCount(count) {
-  const n10 = count % 10
-  const n100 = count % 100
-  if (n10 === 1 && n100 !== 11) {
-    return `${count} объект`
-  }
-  if (n10 >= 2 && n10 <= 4 && (n100 < 12 || n100 > 14)) {
-    return `${count} объекта`
-  }
-  return `${count} объектов`
-}
 
 export default function MapPage() {
   const apikey = import.meta.env.VITE_YANDEX_MAPS_API_KEY

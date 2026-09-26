@@ -22,7 +22,6 @@ Vue 3 + Vite + pnpm, Pinia/Redux Toolkit для state, i18n (ru/en в `src/i18n/
 | `src/components/pages/notifications/Notifications.jsx` | уведомления |
 | `src/components/pages/reports/Reports.jsx` | отчёты |
 | `src/components/pages/settings/Settings.jsx` | настройки |
-| `src/components/pages/homePage/Home.jsx` | домашняя |
 | `src/store/index.js`, `src/store/menuSlice.js` | state (Redux Toolkit) |
 
 ## API

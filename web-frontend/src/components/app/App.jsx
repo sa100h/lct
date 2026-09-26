@@ -11,7 +11,6 @@ import RequireAuth from '@/components/auth/RequireAuth.jsx'
 import RequireModule from '@/components/auth/RequireModule.jsx'
 import AppLayout from '@/components/appLayout/AppLayout.jsx'
 import Login from '@/components/pages/login/Login.jsx'
-import Home from '../pages/homePage/Home'
 import Dashboard from '../pages/dashboard/Dashboard'
 import MapPage from '../pages/map/Map'
 import Prediction from '../pages/prediction/Prediction'
@@ -42,8 +41,7 @@ const router = createBrowserRouter([
       {
         element: <RequireModule />,
         children: [
-          { path: '/', element: <Home /> },
-          { path: '/dashboard', element: <Dashboard /> },
+          { path: '/', element: <Dashboard /> },
           { path: '/map', element: <MapPage /> },
           { path: '/prediction', element: <Prediction /> },
           { path: '/history', element: <History /> },

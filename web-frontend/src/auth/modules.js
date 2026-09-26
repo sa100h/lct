@@ -1,6 +1,5 @@
 export const MODULES = [
-  { path: '/', permission: 'module.home', label: 'Главная' },
-  { path: '/dashboard', permission: 'module.dashboard', label: 'Дашборд' },
+  { path: '/', permission: 'module.dashboard', label: 'Дашборд' },
   { path: '/map', permission: 'module.map', label: 'Карта' },
   { path: '/prediction', permission: 'module.prediction', label: 'Прогноз' },
   { path: '/history', permission: 'module.history', label: 'История' },

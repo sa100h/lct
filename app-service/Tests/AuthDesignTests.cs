@@ -52,7 +52,6 @@ public sealed class AuthDesignTests
         Assert.Equal(
             [
                 PermissionCodes.DemoAccess,
-                PermissionCodes.ModuleHome,
                 PermissionCodes.ModuleMap,
                 PermissionCodes.ModulePrediction,
                 PermissionCodes.ModuleHistory
@@ -65,7 +64,6 @@ public sealed class AuthDesignTests
         new RoleDefinition("admin", "CN=Admins,OU=Groups,DC=lct,DC=ru",
         [
             PermissionCodes.DemoAccess,
-            PermissionCodes.ModuleHome,
             PermissionCodes.ModuleDashboard,
             PermissionCodes.ModuleMap,
             PermissionCodes.ModulePrediction,
@@ -77,7 +75,6 @@ public sealed class AuthDesignTests
         new RoleDefinition("technician", "CN=Technics,OU=Groups,DC=lct,DC=ru",
         [
             PermissionCodes.DemoAccess,
-            PermissionCodes.ModuleHome,
             PermissionCodes.ModuleMap,
             PermissionCodes.ModulePrediction,
             PermissionCodes.ModuleHistory
@@ -85,7 +82,6 @@ public sealed class AuthDesignTests
         new RoleDefinition("dispatcher_ods", "CN=Dispetchers_ODS,OU=Groups,DC=lct,DC=ru",
         [
             PermissionCodes.DemoAccess,
-            PermissionCodes.ModuleHome,
             PermissionCodes.ModuleDashboard,
             PermissionCodes.ModuleMap,
             PermissionCodes.ModuleNotifications,
@@ -94,7 +90,6 @@ public sealed class AuthDesignTests
         new RoleDefinition("dispatcher_district", "CN=Dispetchers_rayon,OU=Groups,DC=lct,DC=ru",
         [
             PermissionCodes.DemoAccess,
-            PermissionCodes.ModuleHome,
             PermissionCodes.ModuleMap,
             PermissionCodes.ModuleNotifications
         ])
@@ -132,7 +127,7 @@ public sealed class AuthDesignTests
             Assert.Equal("dispatcher_district", jwt.Claims.Single(c => c.Type == JwtClaimNames.Role).Value);
             Assert.Equal("dispetcher_rayon", jwt.Claims.Single(c => c.Type == JwtClaimNames.Login).Value);
             Assert.Contains(jwt.Claims, c => c.Type == JwtClaimNames.Permission && c.Value == PermissionCodes.DemoAccess);
-            Assert.Contains(jwt.Claims, c => c.Type == JwtClaimNames.Permission && c.Value == PermissionCodes.ModuleHome);
+            Assert.Contains(jwt.Claims, c => c.Type == JwtClaimNames.Permission && c.Value == PermissionCodes.ModuleMap);
             Assert.DoesNotContain(jwt.Claims, c => c.Type == JwtClaimNames.Permission && c.Value == PermissionCodes.ModuleSettings);
             using var payload = JsonDocument.Parse(jwt.Payload.SerializeToJson());
             Assert.Equal(JsonValueKind.Array,
@@ -197,26 +192,26 @@ public sealed class AuthDesignTests
         var catalog = CreateCatalog();
         Assert.Equal(
             [
-                PermissionCodes.DemoAccess, PermissionCodes.ModuleHome, PermissionCodes.ModuleDashboard,
+                PermissionCodes.DemoAccess, PermissionCodes.ModuleDashboard,
                 PermissionCodes.ModuleMap, PermissionCodes.ModulePrediction, PermissionCodes.ModuleHistory,
                 PermissionCodes.ModuleNotifications, PermissionCodes.ModuleReports, PermissionCodes.ModuleSettings
             ],
             catalog.GetPermissions("admin"));
         Assert.Equal(
             [
-                PermissionCodes.DemoAccess, PermissionCodes.ModuleHome, PermissionCodes.ModuleMap,
+                PermissionCodes.DemoAccess, PermissionCodes.ModuleMap,
                 PermissionCodes.ModulePrediction, PermissionCodes.ModuleHistory
             ],
             catalog.GetPermissions("technician"));
         Assert.Equal(
             [
-                PermissionCodes.DemoAccess, PermissionCodes.ModuleHome, PermissionCodes.ModuleDashboard,
+                PermissionCodes.DemoAccess, PermissionCodes.ModuleDashboard,
                 PermissionCodes.ModuleMap, PermissionCodes.ModuleNotifications, PermissionCodes.ModuleReports
             ],
             catalog.GetPermissions("dispatcher_ods"));
         Assert.Equal(
             [
-                PermissionCodes.DemoAccess, PermissionCodes.ModuleHome, PermissionCodes.ModuleMap,
+                PermissionCodes.DemoAccess, PermissionCodes.ModuleMap,
                 PermissionCodes.ModuleNotifications
             ],
             catalog.GetPermissions("dispatcher_district"));
@@ -233,17 +228,17 @@ public sealed class AuthDesignTests
                 .GetProperty("Permissions").EnumerateArray().Select(v => v.GetString()!).ToArray();
 
         Assert.Equal(
-            ["demo.access", "module.home", "module.dashboard", "module.map", "module.prediction",
+            ["demo.access", "module.dashboard", "module.map", "module.prediction",
              "module.history", "module.notifications", "module.reports", "module.settings"],
             Read("admin"));
         Assert.Equal(
-            ["demo.access", "module.home", "module.map", "module.prediction", "module.history"],
+            ["demo.access", "module.map", "module.prediction", "module.history"],
             Read("technician"));
         Assert.Equal(
-            ["demo.access", "module.home", "module.dashboard", "module.map", "module.notifications", "module.reports"],
+            ["demo.access", "module.dashboard", "module.map", "module.notifications", "module.reports"],
             Read("dispatcher_ods"));
         Assert.Equal(
-            ["demo.access", "module.home", "module.map", "module.notifications"],
+            ["demo.access", "module.map", "module.notifications"],
             Read("dispatcher_district"));
     }
 }

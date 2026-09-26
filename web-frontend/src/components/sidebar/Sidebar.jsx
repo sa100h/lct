@@ -1,5 +1,4 @@
 import { 
-  HomeOutlined,
   DashboardOutlined,
   FullscreenOutlined,
   CloudOutlined,
@@ -15,8 +14,7 @@ import { getAllowedModules } from '@/auth/modules.js'
 import { setSelectedKey } from '@/store/menuSlice.js'
 
 const ICONS = {
-  '/': <HomeOutlined />,
-  '/dashboard': <DashboardOutlined />,
+  '/': <DashboardOutlined />,
   '/map': <FullscreenOutlined />,
   '/prediction': <CloudOutlined />,
   '/history': <HistoryOutlined />,

@@ -9,7 +9,6 @@ import {
 
 const ORDER = [
   '/',
-  '/dashboard',
   '/map',
   '/prediction',
   '/history',
@@ -22,13 +21,23 @@ test('MODULES order is canonical', () => {
   assert.deepEqual(MODULES.map((m) => m.path), ORDER)
 })
 
+test('dashboard lives at / with module.dashboard', () => {
+  assert.equal(MODULES[0].permission, 'module.dashboard')
+  assert.equal(MODULES[0].label, 'Дашборд')
+  assert.equal(
+    MODULES.some((m) => m.path === '/dashboard' || m.permission === 'module.home'),
+    false,
+  )
+})
+
 test('getAllowedModules keeps canonical order', () => {
-  const allowed = getAllowedModules(['module.settings', 'module.home', 'module.map'])
+  const allowed = getAllowedModules(['module.settings', 'module.dashboard', 'module.map'])
   assert.deepEqual(allowed.map((m) => m.path), ['/', '/map', '/settings'])
 })
 
 test('getFirstAllowedPath is first in MODULES not in caller order', () => {
   assert.equal(getFirstAllowedPath(['module.settings', 'module.map']), '/map')
+  assert.equal(getFirstAllowedPath(['module.map', 'module.dashboard']), '/')
 })
 
 test('empty permissions hide all modules and have no fallback path', () => {
@@ -38,7 +47,10 @@ test('empty permissions hide all modules and have no fallback path', () => {
 })
 
 test('isPathAllowed matches permission for path', () => {
-  const technician = ['module.home', 'module.map', 'module.prediction', 'module.history']
-  assert.equal(isPathAllowed(technician, '/'), true)
+  const technician = ['module.map', 'module.prediction', 'module.history']
+  assert.equal(isPathAllowed(technician, '/'), false)
+  assert.equal(isPathAllowed(technician, '/map'), true)
   assert.equal(isPathAllowed(technician, '/settings'), false)
+  assert.equal(isPathAllowed(['module.dashboard'], '/'), true)
+  assert.equal(isPathAllowed(['module.dashboard'], '/dashboard'), false)
 })

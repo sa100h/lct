@@ -4,7 +4,6 @@ public static class PermissionCodes
 {
     // Endpoint policy name. Role assignments live in appsettings.json.
     public const string DemoAccess = "demo.access";
-    public const string ModuleHome = "module.home";
     public const string ModuleDashboard = "module.dashboard";
     public const string ModuleMap = "module.map";
     public const string ModulePrediction = "module.prediction";

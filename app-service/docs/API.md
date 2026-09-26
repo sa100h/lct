@@ -390,7 +390,7 @@ curl -k -X POST https://localhost/api/app/predict \
 ```json
 {
   "role": "technician",
-  "permissions": ["demo.access", "module.home", "module.map", "module.prediction", "module.history"]
+  "permissions": ["demo.access", "module.map", "module.prediction", "module.history"]
 }
 ```
 

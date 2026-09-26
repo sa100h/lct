@@ -10,13 +10,13 @@ function tokenWith(payload) {
 test('setSession reads permissions array from jwt', () => {
   const token = tokenWith({
     login: 'admin.test',
-    permissions: ['demo.access', 'module.home'],
+    permissions: ['demo.access', 'module.dashboard'],
   })
   const state = reducer(
     { accessToken: null, login: null, permissions: [], status: 'unknown' },
     setSession(token),
   )
-  assert.deepEqual(state.permissions, ['demo.access', 'module.home'])
+  assert.deepEqual(state.permissions, ['demo.access', 'module.dashboard'])
   assert.equal(state.login, 'admin.test')
   assert.equal(state.status, 'authenticated')
 })
@@ -35,7 +35,7 @@ test('clearSession resets permissions', () => {
     {
       accessToken: 't',
       login: 'x',
-      permissions: ['module.home'],
+      permissions: ['module.dashboard'],
       status: 'authenticated',
     },
     clearSession(),
