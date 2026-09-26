@@ -1,10 +1,12 @@
 import { useCallback, useState, useEffect } from 'react'
 import { Alert, Button, Spin, Tree } from 'antd'
+import { useLocation } from 'react-router-dom'
 import { AuthHttpError } from '@/api/auth.js'
 import { listDispatcherObjects } from '@/api/dispatcherObjects.js'
 import { buildObjectTree } from '@/components/pages/prediction/buildObjectTree.js'
 import { ancestorKeys, rootExpandedKeys, toMapMarkers } from './mapTreeKeys.js'
 import { formatObjectCount } from '@/components/objectTree/formatObjectCount.js'
+import { parseMapObjectId } from './mapObjectQuery.js'
 import YandexMap from './YandexMap.jsx'
 import './Map.css'
 
@@ -15,6 +17,7 @@ const LOAD_ERROR_TEXT =
   'Не удалось загрузить Яндекс.Карты. Проверьте ключ, сеть и ограничения ключа по HTTP Referrer.'
 
 export default function MapPage() {
+  const location = useLocation()
   const apikey = import.meta.env.VITE_YANDEX_MAPS_API_KEY
   const [objects, setObjects] = useState([])
   const [treeData, setTreeData] = useState([])
@@ -41,11 +44,20 @@ export default function MapPage() {
           return
         }
         const tree = buildObjectTree(list)
+        const fromQuery = parseMapObjectId(location.search)
+        const queryObject =
+          fromQuery != null && list.some((item) => item.id === fromQuery)
+            ? fromQuery
+            : null
         setObjects(list)
         setTreeData(tree)
         setMarkers(toMapMarkers(list))
-        setExpandedKeys(rootExpandedKeys(tree))
-        setSelectedId(tree[0] ? Number(tree[0].key) : null)
+        setExpandedKeys(
+          queryObject == null
+            ? rootExpandedKeys(tree)
+            : [...new Set([...rootExpandedKeys(tree), ...ancestorKeys(list, queryObject)])],
+        )
+        setSelectedId(queryObject ?? (tree[0] ? Number(tree[0].key) : null))
       } catch (error) {
         if (cancelled) {
           return
@@ -71,7 +83,7 @@ export default function MapPage() {
     return () => {
       cancelled = true
     }
-  }, [])
+  }, [location.search])
 
   const selectFromMap = (id) => {
     setSelectedId(id)

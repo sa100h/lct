@@ -29,6 +29,16 @@ public sealed class AuthDesignTests
     }
 
     [Fact]
+    public void Dashboard_RequiresModuleDashboardPermission()
+    {
+        var method = typeof(DashboardController).GetMethod(nameof(DashboardController.Get));
+        var authorize = Assert.Single(method!.GetCustomAttributes(typeof(AuthorizeAttribute), inherit: true)
+            .Cast<AuthorizeAttribute>());
+
+        Assert.Equal(PermissionCodes.ModuleDashboard, authorize.Policy);
+    }
+
+    [Fact]
     public void ForecastRun_RequiresModulePredictionPermission()
     {
         var method = typeof(ForecastsController).GetMethod(nameof(ForecastsController.Run));

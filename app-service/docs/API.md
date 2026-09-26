@@ -212,6 +212,75 @@ curl http://localhost:8080/health
 
 ---
 
+## Дашборд
+
+### `GET /dashboard`
+
+Нужны JWT и permission `module.dashboard`. Одна сводка для экрана «Дашборд»:
+цифры по объектам, до 20 проблемных, до 20 последних событий, до 10 запусков
+прогноза, до 20 заявок.
+
+**Ответ 200**
+
+```json
+{
+  "objects": {
+    "total": 80,
+    "normal": 72,
+    "deviation": 8,
+    "problemObjects": [
+      { "id": 5, "name": "объект Альфа", "statuses": ["Тревога"] }
+    ]
+  },
+  "events": [
+    {
+      "id": 1001,
+      "occurredAt": "2026-09-26T10:15:00Z",
+      "objectId": 5,
+      "objectName": "объект Альфа",
+      "channelName": "Дым",
+      "isAlarm": true,
+      "value": "1"
+    }
+  ],
+  "forecasts": [
+    {
+      "id": "2c059017-47c7-480a-b0a1-516be249695d",
+      "createdAt": "2026-09-25T10:30:00Z",
+      "status": "pending"
+    }
+  ],
+  "requests": [
+    {
+      "id": "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+      "description": "Проверить шкаф",
+      "objectId": 5,
+      "objectName": "объект Альфа",
+      "status": "Новая"
+    }
+  ]
+}
+```
+
+Объект **в норме**, если `statuses` пустой или все значения равны `Норма`.
+**Отклонение** — есть статус ≠ `Норма`. Пустые ленты — `[]`.
+
+Статус прогноза: `pending` (нет start/end composition), `running` (есть start, нет end), `done` (есть end).
+
+**Пример**
+
+```bash
+curl -k https://localhost/api/app/dashboard \
+  -H 'Authorization: Bearer eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9...'
+```
+
+| Код | Когда |
+|---|---|
+| 401 | Нет или невалидный JWT |
+| 403 | Нет права `module.dashboard` |
+
+---
+
 ## Запуски прогнозирования
 
 ### `POST /forecasts/run`
@@ -419,6 +488,7 @@ curl -k https://localhost/api/app/authz/demo \
 | POST | `/auth/logout` | `/api/app/auth/logout` | cookie refresh (опц.) |
 | GET | `/status` | `/api/app/status` | нет |
 | GET | `/dispatcher_objects` | `/api/app/dispatcher_objects` | Bearer + `module.map` |
+| GET | `/dashboard` | `/api/app/dashboard` | Bearer + `module.dashboard` |
 | GET | `/ml/status` | `/api/app/ml/status` | нет |
 | POST | `/forecasts/run` | `/api/app/forecasts/run` | Bearer + `module.prediction` |
 | POST | `/predict` | `/api/app/predict` | Bearer |
