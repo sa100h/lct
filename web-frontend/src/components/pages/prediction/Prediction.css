@@ -1,0 +1,23 @@
+.prediction-page {
+  max-width: 640px;
+}
+
+.prediction-page h1 {
+  margin: 0 0 16px;
+  font-size: 20px;
+  font-weight: 600;
+}
+
+.prediction-alert {
+  margin-bottom: 16px;
+}
+
+.prediction-tree {
+  margin: 12px 0 16px;
+  padding: 8px;
+  max-height: 480px;
+  overflow: auto;
+  border: 1px solid #f0f0f0;
+  border-radius: 8px;
+  background: #fff;
+}
