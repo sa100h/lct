@@ -49,6 +49,33 @@ public sealed class AuthDesignTests
     }
 
     [Fact]
+    public void ForecastHistoryAuthors_RequiresModuleHistoryPermission()
+    {
+        AssertHistoryPolicy(nameof(ForecastsController.Authors));
+    }
+
+    [Fact]
+    public void ForecastHistoryList_RequiresModuleHistoryPermission()
+    {
+        AssertHistoryPolicy(nameof(ForecastsController.List));
+    }
+
+    [Fact]
+    public void ForecastHistoryGetById_RequiresModuleHistoryPermission()
+    {
+        AssertHistoryPolicy(nameof(ForecastsController.GetById));
+    }
+
+    private static void AssertHistoryPolicy(string methodName)
+    {
+        var method = typeof(ForecastsController).GetMethod(methodName);
+        var authorize = Assert.Single(method!.GetCustomAttributes(typeof(AuthorizeAttribute), inherit: true)
+            .Cast<AuthorizeAttribute>());
+
+        Assert.Equal(PermissionCodes.ModuleHistory, authorize.Policy);
+    }
+
+    [Fact]
     public void RoleAccessCatalog_RequiresExactlyOneApplicationGroup()
     {
         var catalog = CreateCatalog();

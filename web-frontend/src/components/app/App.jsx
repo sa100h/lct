@@ -15,6 +15,7 @@ import Dashboard from '../pages/dashboard/Dashboard'
 import MapPage from '../pages/map/Map'
 import Prediction from '../pages/prediction/Prediction'
 import History from '../pages/history/History'
+import HistoryDetail from '../pages/history/HistoryDetail.jsx'
 import Notifications from '../pages/notifications/Notifications'
 import Reports from '../pages/reports/Reports'
 import Settings from '../pages/settings/Settings'
@@ -45,6 +46,7 @@ const router = createBrowserRouter([
           { path: '/map', element: <MapPage /> },
           { path: '/prediction', element: <Prediction /> },
           { path: '/history', element: <History /> },
+          { path: '/history/:id', element: <HistoryDetail /> },
           { path: '/notifications', element: <Notifications /> },
           { path: '/reports', element: <Reports /> },
           { path: '/settings', element: <Settings /> },

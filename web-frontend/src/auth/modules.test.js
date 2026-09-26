@@ -54,3 +54,14 @@ test('isPathAllowed matches permission for path', () => {
   assert.equal(isPathAllowed(['module.dashboard'], '/'), true)
   assert.equal(isPathAllowed(['module.dashboard'], '/dashboard'), false)
 })
+
+test('isPathAllowed treats /history/:id as module.history', () => {
+  const history = ['module.history']
+  assert.equal(isPathAllowed(history, '/history'), true)
+  assert.equal(
+    isPathAllowed(history, '/history/2c059017-47c7-480a-b0a1-516be249695d'),
+    true,
+  )
+  assert.equal(isPathAllowed(history, '/map'), false)
+  assert.equal(isPathAllowed(['module.map'], '/history/abc'), false)
+})

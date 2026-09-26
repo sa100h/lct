@@ -1,0 +1,46 @@
+.history-detail {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  height: calc(100vh - 64px - 32px);
+  min-height: 360px;
+}
+
+.history-detail .map-page {
+  flex: 1;
+  min-height: 0;
+}
+
+.history-detail-error {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  align-items: flex-start;
+}
+
+.history-detail-spin {
+  display: block;
+  margin: 32px auto;
+}
+
+.history-detail-modal p {
+  margin: 0 0 8px;
+}
+
+.history-detail .map-marker-ok {
+  background: #52c41a;
+}
+
+.history-detail .map-marker-risk {
+  background: #fadb14;
+}
+
+.history-detail .map-marker-ok.map-marker-active {
+  background: #52c41a;
+  transform: scale(1.25);
+}
+
+.history-detail .map-marker-risk.map-marker-active {
+  background: #fadb14;
+  transform: scale(1.25);
+}

@@ -315,6 +315,88 @@ curl -k https://localhost/api/app/dashboard \
 ID создателя берётся из `sub` текущего JWT. В `forecast_objects` сохраняется
 JSON-массив выбранных объектов либо SQL `NULL` для всех объектов.
 
+### `GET /forecasts/authors`
+
+Нужны JWT и permission `module.history`. Логины пользователей, у которых есть хотя бы одна запись в `forecast_journal`, по возрастанию `login`.
+
+**Ответ 200**
+
+```json
+[{ "id": "03863c40-04e4-4ffe-b7cf-3dd31dab0ade", "login": "admin.test" }]
+```
+
+Объявлять этот маршрут до `GET /forecasts/{id}`.
+
+### `GET /forecasts`
+
+Нужны JWT и permission `module.history`. Страница журнала запусков.
+
+Query:
+
+| Параметр | Тип | По умолчанию | Описание |
+|---|---|---|---|
+| `createdBy` | uuid | — | Автор запуска |
+| `from` | `YYYY-MM-DD` | — | Дата создания, включительно |
+| `to` | `YYYY-MM-DD` | — | Дата создания, включительно |
+| `page` | int | 1 | Номер страницы |
+| `pageSize` | int | 20 | Размер; больше 20 обрезается до 20 |
+
+`page < 1` или `pageSize < 1`, битый uuid/дата — `400`. Сортировка: `creation_time DESC`, `id DESC`.
+
+Статус: `pending` / `running` / `done` (как на дашборде). `objectCount` — длина `forecast_objects` либо число всех `dispatcher_objects`, если в журнале `NULL`.
+
+**Ответ 200**
+
+```json
+{
+  "items": [
+    {
+      "id": "2c059017-47c7-480a-b0a1-516be249695d",
+      "createdAt": "2026-09-25T10:30:00Z",
+      "authorLogin": "admin.test",
+      "status": "pending",
+      "objectCount": 96
+    }
+  ],
+  "total": 1
+}
+```
+
+### `GET /forecasts/{id}`
+
+Нужны JWT и permission `module.history`. Деталь запуска: объекты с координатами и `hasHighRisk` (пока всегда `false`).
+
+Если `forecast_objects` is `NULL` — все диспетчерские объекты.
+
+**Ответ 200**
+
+```json
+{
+  "id": "2c059017-47c7-480a-b0a1-516be249695d",
+  "createdAt": "2026-09-25T10:30:00Z",
+  "authorLogin": "admin.test",
+  "status": "pending",
+  "objects": [
+    {
+      "id": 20,
+      "name": "объект Альфа",
+      "parentId": null,
+      "latitude": 55.6,
+      "longitude": 37.45,
+      "statuses": [],
+      "hasHighRisk": false
+    }
+  ]
+}
+```
+
+| Код | Когда |
+|---|---|
+| 400 | Битые query (`GET /forecasts`) |
+| 401 | Нет JWT |
+| 403 | Нет права `module.history` |
+| 404 | Нет журнала (`GET /forecasts/{id}`) |
+
 ---
 
 ## ML через app-service
@@ -491,6 +573,9 @@ curl -k https://localhost/api/app/authz/demo \
 | GET | `/dashboard` | `/api/app/dashboard` | Bearer + `module.dashboard` |
 | GET | `/ml/status` | `/api/app/ml/status` | нет |
 | POST | `/forecasts/run` | `/api/app/forecasts/run` | Bearer + `module.prediction` |
+| GET | `/forecasts/authors` | `/api/app/forecasts/authors` | Bearer + `module.history` |
+| GET | `/forecasts` | `/api/app/forecasts` | Bearer + `module.history` |
+| GET | `/forecasts/{id}` | `/api/app/forecasts/{id}` | Bearer + `module.history` |
 | POST | `/predict` | `/api/app/predict` | Bearer |
 | GET | `/authz/demo` | `/api/app/authz/demo` | Bearer + `demo.access` |
 | GET | `/health` | нет (напрямую :8080) | нет |

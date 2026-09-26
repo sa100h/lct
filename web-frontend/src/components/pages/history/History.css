@@ -1,0 +1,25 @@
+.history-page {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.history-alert {
+  margin: 0;
+}
+
+.history-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: center;
+}
+
+.history-filter-author {
+  min-width: 220px;
+}
+
+.history-spin {
+  display: block;
+  margin: 32px auto;
+}

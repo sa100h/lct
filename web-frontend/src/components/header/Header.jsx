@@ -1,5 +1,5 @@
 import { Button, Dropdown } from 'antd'
-import { MenuOutlined, UserOutlined } from '@ant-design/icons'
+import { DownOutlined, MenuOutlined, UserOutlined } from '@ant-design/icons'
 import { useDispatch, useSelector } from 'react-redux'
 import { useNavigate } from 'react-router-dom'
 import { logout } from '@/api/auth.js'
@@ -49,12 +49,9 @@ const Header = () => {
           }}
         >
           <div className="header-profile">
+            <UserOutlined className="header-profile-icon" />
             {login ? <span className="header-profile-name">{login}</span> : null}
-            <Button
-              type="text"
-              className="header-profile-btn"
-              icon={<UserOutlined />}
-            />
+            <DownOutlined className="header-profile-chevron" />
           </div>
         </Dropdown>
       </div>

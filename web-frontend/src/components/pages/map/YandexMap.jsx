@@ -73,9 +73,9 @@ export default function YandexMap({ apikey, markers, selectedId, onSelect, onErr
           <YMapMarker key={marker.id} source="collectors" coordinates={marker.coordinates}>
             <button
               type="button"
-              className={
-                marker.id === selectedId ? 'map-marker map-marker-active' : 'map-marker'
-              }
+              className={`map-marker${marker.tone ? ` map-marker-${marker.tone}` : ''}${
+                marker.id === selectedId ? ' map-marker-active' : ''
+              }`}
               onClick={() => onSelect(marker.id)}
             />
           </YMapMarker>

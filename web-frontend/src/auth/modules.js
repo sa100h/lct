@@ -18,5 +18,10 @@ export function getFirstAllowedPath(permissions) {
 }
 
 export function isPathAllowed(permissions, path) {
-  return getAllowedModules(permissions).some((module) => module.path === path)
+  return getAllowedModules(permissions).some((module) => {
+    if (module.path === path) {
+      return true
+    }
+    return module.path !== '/' && path.startsWith(`${module.path}/`)
+  })
 }

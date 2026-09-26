@@ -94,6 +94,24 @@ public sealed class ForecastRunServiceTests
             DispatcherObjectIds = dispatcherObjectIds;
             return Task.FromResult(new ForecastJournalEntry(Guid.NewGuid(), createdAt, dispatcherObjectIds));
         }
+
+        public Task<IReadOnlyList<ForecastAuthor>> ListAuthorsAsync(
+            CancellationToken cancellationToken = default)
+            => throw new NotSupportedException();
+
+        public Task<(IReadOnlyList<ForecastHistoryListRow> Items, int Total)> ListRowsAsync(
+            Guid? createdBy,
+            DateOnly? from,
+            DateOnly? to,
+            int offset,
+            int limit,
+            CancellationToken cancellationToken = default)
+            => throw new NotSupportedException();
+
+        public Task<ForecastHistoryHeader?> GetHeaderAsync(
+            Guid id,
+            CancellationToken cancellationToken = default)
+            => throw new NotSupportedException();
     }
 
     private sealed class FixedTimeProvider(DateTimeOffset now) : TimeProvider

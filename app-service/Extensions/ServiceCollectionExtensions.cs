@@ -48,6 +48,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IDispatcherObjectQueryService, DispatcherObjectQueryService>();
         services.AddScoped<IDashboardQueryService, DashboardQueryService>();
         services.AddScoped<IForecastRunService, ForecastRunService>();
+        services.AddScoped<IForecastHistoryQueryService, ForecastHistoryQueryService>();
         services.AddSingleton<PostgresMigrator>();
         services.AddHostedService<AppMigrationHostedService>();
         services.AddHealthChecks().AddNpgSql(connectionString, name: "postgres");

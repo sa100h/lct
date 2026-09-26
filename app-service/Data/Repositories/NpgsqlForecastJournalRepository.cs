@@ -71,4 +71,140 @@ public sealed class NpgsqlForecastJournalRepository(string connectionString) : I
 
         return new ForecastJournalEntry(id, createdAt, dispatcherObjectIds);
     }
+
+    public async Task<IReadOnlyList<ForecastAuthor>> ListAuthorsAsync(
+        CancellationToken cancellationToken = default)
+    {
+        await using var connection = new NpgsqlConnection(connectionString);
+        await connection.OpenAsync(cancellationToken);
+        await using var command = new NpgsqlCommand("""
+            SELECT DISTINCT u.id, u.login
+            FROM forecast_journal j
+            JOIN users u ON u.id = j.user_created_id
+            ORDER BY u.login
+            """, connection);
+
+        var result = new List<ForecastAuthor>();
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+        while (await reader.ReadAsync(cancellationToken))
+        {
+            result.Add(new ForecastAuthor(reader.GetGuid(0), reader.GetString(1)));
+        }
+
+        return result;
+    }
+
+    public async Task<(IReadOnlyList<ForecastHistoryListRow> Items, int Total)> ListRowsAsync(
+        Guid? createdBy,
+        DateOnly? from,
+        DateOnly? to,
+        int offset,
+        int limit,
+        CancellationToken cancellationToken = default)
+    {
+        await using var connection = new NpgsqlConnection(connectionString);
+        await connection.OpenAsync(cancellationToken);
+
+        const string filters = """
+            FROM forecast_journal j
+            JOIN users u ON u.id = j.user_created_id
+            WHERE (@createdBy::uuid IS NULL OR j.user_created_id = @createdBy)
+              AND (@fromDate::date IS NULL OR j.creation_time::date >= @fromDate)
+              AND (@toDate::date IS NULL OR j.creation_time::date <= @toDate)
+            """;
+
+        await using var countCommand = connection.CreateCommand();
+        countCommand.CommandText = $"SELECT COUNT(*)::int {filters}";
+        AddListParameters(countCommand, createdBy, from, to);
+        var total = (int)(await countCommand.ExecuteScalarAsync(cancellationToken)
+            ?? throw new InvalidOperationException("Forecast history count returned null."));
+
+        await using var listCommand = connection.CreateCommand();
+        listCommand.CommandText = $"""
+            SELECT j.id, j.creation_time, u.login, j.start_composition_time, j.end_composition_time,
+                CASE
+                    WHEN j.forecast_objects IS NULL THEN (SELECT COUNT(*)::int FROM dispatcher_objects)
+                    ELSE jsonb_array_length(j.forecast_objects::jsonb)
+                END
+            {filters}
+            ORDER BY j.creation_time DESC, j.id DESC
+            OFFSET @offset LIMIT @limit
+            """;
+        AddListParameters(listCommand, createdBy, from, to);
+        listCommand.Parameters.AddWithValue("offset", offset);
+        listCommand.Parameters.AddWithValue("limit", limit);
+
+        var items = new List<ForecastHistoryListRow>();
+        await using var reader = await listCommand.ExecuteReaderAsync(cancellationToken);
+        while (await reader.ReadAsync(cancellationToken))
+        {
+            items.Add(new ForecastHistoryListRow(
+                reader.GetGuid(0),
+                ReadUtc(reader, 1),
+                reader.GetString(2),
+                ReadUtcOrNull(reader, 3),
+                ReadUtcOrNull(reader, 4),
+                reader.GetInt32(5)));
+        }
+
+        return (items, total);
+    }
+
+    public async Task<ForecastHistoryHeader?> GetHeaderAsync(
+        Guid id,
+        CancellationToken cancellationToken = default)
+    {
+        await using var connection = new NpgsqlConnection(connectionString);
+        await connection.OpenAsync(cancellationToken);
+        await using var command = new NpgsqlCommand("""
+            SELECT j.id, j.creation_time, u.login, j.start_composition_time, j.end_composition_time, j.forecast_objects
+            FROM forecast_journal j
+            JOIN users u ON u.id = j.user_created_id
+            WHERE j.id = @id
+            """, connection);
+        command.Parameters.AddWithValue("id", id);
+
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+        if (!await reader.ReadAsync(cancellationToken))
+        {
+            return null;
+        }
+
+        IReadOnlyList<int>? objectIds = null;
+        if (!reader.IsDBNull(5))
+        {
+            objectIds = JsonSerializer.Deserialize<int[]>(reader.GetFieldValue<string>(5));
+        }
+
+        return new ForecastHistoryHeader(
+            reader.GetGuid(0),
+            ReadUtc(reader, 1),
+            reader.GetString(2),
+            ReadUtcOrNull(reader, 3),
+            ReadUtcOrNull(reader, 4),
+            objectIds);
+    }
+
+    private static void AddListParameters(
+        NpgsqlCommand command,
+        Guid? createdBy,
+        DateOnly? from,
+        DateOnly? to)
+    {
+        var createdByParameter = command.Parameters.Add("createdBy", NpgsqlDbType.Uuid);
+        createdByParameter.Value = createdBy is null ? DBNull.Value : createdBy.Value;
+        var fromParameter = command.Parameters.Add("fromDate", NpgsqlDbType.Date);
+        fromParameter.Value = from is null ? DBNull.Value : from.Value;
+        var toParameter = command.Parameters.Add("toDate", NpgsqlDbType.Date);
+        toParameter.Value = to is null ? DBNull.Value : to.Value;
+    }
+
+    private static DateTimeOffset ReadUtc(NpgsqlDataReader reader, int ordinal)
+    {
+        var value = reader.GetDateTime(ordinal);
+        return new DateTimeOffset(DateTime.SpecifyKind(value, DateTimeKind.Utc));
+    }
+
+    private static DateTimeOffset? ReadUtcOrNull(NpgsqlDataReader reader, int ordinal)
+        => reader.IsDBNull(ordinal) ? null : ReadUtc(reader, ordinal);
 }
