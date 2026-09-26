@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Alert, Spin, Table } from 'antd'
-import { Link } from 'react-router-dom'
+import { useSelector } from 'react-redux'
+import { Link, useNavigate } from 'react-router-dom'
 import { AuthHttpError } from '@/api/auth.js'
 import { getDashboard } from '@/api/dashboard.js'
 import './Dashboard.css'
@@ -29,6 +30,9 @@ function DashboardSection({ title, body, children }) {
 }
 
 export default function Dashboard() {
+  const navigate = useNavigate()
+  const permissions = useSelector((state) => state.auth.permissions)
+  const canOpenHistory = permissions.includes('module.history')
   const [data, setData] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
@@ -149,6 +153,14 @@ export default function Dashboard() {
           locale={{ emptyText: EMPTY }}
           rowKey="id"
           dataSource={data.forecasts ?? []}
+          onRow={(record) =>
+            canOpenHistory
+              ? {
+                  onClick: () => navigate(`/history/${record.id}`),
+                  className: 'dashboard-forecast-row',
+                }
+              : undefined
+          }
           columns={[
             {
               title: 'Создан',

@@ -2,7 +2,6 @@ import {
   DashboardOutlined,
   FullscreenOutlined,
   CloudOutlined,
-  HistoryOutlined,
   NotificationOutlined,
   FileTextOutlined,
   SettingOutlined,
@@ -10,14 +9,13 @@ import {
 import { Menu } from 'antd'
 import { useDispatch, useSelector } from 'react-redux'
 import { useLocation, useNavigate } from 'react-router-dom'
-import { getAllowedModules } from '@/auth/modules.js'
+import { getAllowedModules, getSelectedMenuKey } from '@/auth/modules.js'
 import { setSelectedKey } from '@/store/menuSlice.js'
 
 const ICONS = {
   '/': <DashboardOutlined />,
   '/map': <FullscreenOutlined />,
   '/prediction': <CloudOutlined />,
-  '/history': <HistoryOutlined />,
   '/notifications': <NotificationOutlined />,
   '/reports': <FileTextOutlined />,
   '/settings': <SettingOutlined />,
@@ -39,7 +37,7 @@ export default function Sidebar() {
     <Menu
       mode="inline"
       inlineCollapsed={collapsed}
-      selectedKeys={[location.pathname]}
+      selectedKeys={[getSelectedMenuKey(location.pathname)]}
       items={items}
       onClick={({ key }) => {
         dispatch(setSelectedKey(key))

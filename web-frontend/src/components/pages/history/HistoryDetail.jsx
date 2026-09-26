@@ -121,12 +121,12 @@ export default function HistoryDetail() {
       <div className="history-detail-error">
         <Breadcrumb
           items={[
-            { title: <Link to="/history">История</Link> },
+            { title: <Link to="/prediction">Прогноз</Link> },
             { title: 'Прогноз' },
           ]}
         />
         <Alert type="error" showIcon message={error} />
-        {notFound ? <Link to="/history">К списку истории</Link> : null}
+        {notFound ? <Link to="/prediction">К списку истории</Link> : null}
       </div>
     )
   }
@@ -139,7 +139,7 @@ export default function HistoryDetail() {
     <div className="history-detail">
       <Breadcrumb
         items={[
-          { title: <Link to="/history">История</Link> },
+          { title: <Link to="/prediction">Прогноз</Link> },
           { title: `Прогноз ${formatWhen(detail.createdAt)}` },
         ]}
       />

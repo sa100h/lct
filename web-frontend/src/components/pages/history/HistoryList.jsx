@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
-import { Alert, Breadcrumb, DatePicker, Select, Spin, Table } from 'antd'
+import { Alert, Button, DatePicker, Select, Spin, Table } from 'antd'
+import { RightOutlined } from '@ant-design/icons'
 import { useNavigate } from 'react-router-dom'
 import { AuthHttpError } from '@/api/auth.js'
 import { listForecastAuthors, listForecastHistory } from '@/api/forecastHistory.js'
@@ -18,7 +19,7 @@ function formatWhen(value) {
   return new Date(value).toLocaleString('ru-RU')
 }
 
-export default function History() {
+export default function HistoryList({ refreshKey = 0 }) {
   const navigate = useNavigate()
   const [authors, setAuthors] = useState([])
   const [createdBy, setCreatedBy] = useState(null)
@@ -91,7 +92,7 @@ export default function History() {
     return () => {
       cancelled = true
     }
-  }, [createdBy, from, to, page])
+  }, [createdBy, from, to, page, refreshKey])
 
   if (loading && items.length === 0 && error == null) {
     return <Spin className="history-spin" />
@@ -99,7 +100,6 @@ export default function History() {
 
   return (
     <div className="history-page">
-      <Breadcrumb items={[{ title: 'История' }]} />
       {error ? (
         <Alert className="history-alert" type="error" showIcon message={error} />
       ) : null}
@@ -142,9 +142,6 @@ export default function History() {
         }}
         onChange={(pagination) => setPage(pagination.current)}
         locale={{ emptyText: EMPTY }}
-        onRow={(record) => ({
-          onDoubleClick: () => navigate(`/history/${record.id}`),
-        })}
         dataSource={items}
         columns={[
           {
@@ -159,6 +156,20 @@ export default function History() {
             render: (value) => FORECAST_STATUS[value] ?? value,
           },
           { title: 'Объекты', dataIndex: 'objectCount' },
+          {
+            title: '',
+            key: 'open',
+            width: 48,
+            align: 'right',
+            render: (_, record) => (
+              <Button
+                type="text"
+                icon={<RightOutlined />}
+                aria-label="Открыть прогноз"
+                onClick={() => navigate(`/history/${record.id}`)}
+              />
+            ),
+          },
         ]}
       />
     </div>

@@ -2,7 +2,7 @@ import { useEffect } from 'react'
 import { ConfigProvider } from 'antd'
 import { I18nextProvider } from 'react-i18next'
 import { Provider } from 'react-redux'
-import { createBrowserRouter, RouterProvider } from 'react-router-dom'
+import { Navigate, createBrowserRouter, RouterProvider } from 'react-router-dom'
 import i18n from '@/i18n/index.js'
 
 import { refresh } from '@/api/auth.js'
@@ -14,7 +14,6 @@ import Login from '@/components/pages/login/Login.jsx'
 import Dashboard from '../pages/dashboard/Dashboard'
 import MapPage from '../pages/map/Map'
 import Prediction from '../pages/prediction/Prediction'
-import History from '../pages/history/History'
 import HistoryDetail from '../pages/history/HistoryDetail.jsx'
 import Notifications from '../pages/notifications/Notifications'
 import Reports from '../pages/reports/Reports'
@@ -45,7 +44,7 @@ const router = createBrowserRouter([
           { path: '/', element: <Dashboard /> },
           { path: '/map', element: <MapPage /> },
           { path: '/prediction', element: <Prediction /> },
-          { path: '/history', element: <History /> },
+          { path: '/history', element: <Navigate to="/prediction" replace /> },
           { path: '/history/:id', element: <HistoryDetail /> },
           { path: '/notifications', element: <Notifications /> },
           { path: '/reports', element: <Reports /> },

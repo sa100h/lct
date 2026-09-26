@@ -19,6 +19,7 @@ export default function AppLayout() {
 
       <Layout>
         <Sider
+          className="app-layout-sider"
           collapsed={collapsed}
           collapsible={false}
           trigger={null}

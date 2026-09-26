@@ -107,3 +107,7 @@
   display: block;
   margin: 32px auto;
 }
+
+.dashboard-forecast-row {
+  cursor: pointer;
+}
