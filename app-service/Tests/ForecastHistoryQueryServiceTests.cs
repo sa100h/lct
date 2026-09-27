@@ -98,10 +98,10 @@ public sealed class ForecastHistoryQueryServiceTests
         };
         var objects = new StubDispatcherObjectRepository(
         [
-            new DispatcherObjectInfo(1, null, "root", 1, "district", 37.45, 55.6, [], 0),
-            new DispatcherObjectInfo(2, 1, "parent", 1, "district", 37.45, 55.6, [], 0),
-            new DispatcherObjectInfo(3, 2, "sensor object", 1, "district", 37.45, 55.6, [], 0),
-            new DispatcherObjectInfo(4, 1, "unrelated", 1, "district", 37.45, 55.6, [], 0),
+            new DispatcherObjectInfo(1, null, "root", 1, "district", 37.45, 55.6, [], 0, [], 0),
+            new DispatcherObjectInfo(2, 1, "parent", 1, "district", 37.45, 55.6, [], 0, [], 0),
+            new DispatcherObjectInfo(3, 2, "sensor object", 1, "district", 37.45, 55.6, [], 0, [], 0),
+            new DispatcherObjectInfo(4, 1, "unrelated", 1, "district", 37.45, 55.6, [], 0, [], 0),
         ]);
         var service = new ForecastHistoryQueryService(journal, objects);
 
@@ -112,7 +112,7 @@ public sealed class ForecastHistoryQueryServiceTests
     }
 
     private static DispatcherObjectInfo Object(int id)
-        => new(id, null, $"o{id}", 1, "district", 37.45, 55.6, [], 0);
+        => new(id, null, $"o{id}", 1, "district", 37.45, 55.6, [], 0, [], 0);
 
     private sealed class StubDispatcherObjectRepository(
         IReadOnlyList<DispatcherObjectInfo> result) : IDispatcherObjectRepository

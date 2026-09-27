@@ -111,8 +111,6 @@
 
 .map-tree .ant-tree-title {
     overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
     font-size: 13px;
     line-height: 1.35;
     color: #111827;
@@ -137,7 +135,42 @@
     background: #fadb14;
 }
 
+.map-marker-alert {
+    background: #ff4d4f;
+}
+
 .map-marker-active {
-    background: #fa541c;
     transform: scale(1.25);
+}
+
+.map-marker-active:not(.map-marker-ok):not(.map-marker-alert):not(.map-marker-risk) {
+    background: #fa541c;
+}
+
+.map-tree-node {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+}
+
+.map-tree-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
+}
+
+.map-tree-dot-ok {
+    background: #52c41a;
+}
+
+.map-tree-dot-alert {
+    background: #ff4d4f;
+}
+
+.map-tree-label {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }

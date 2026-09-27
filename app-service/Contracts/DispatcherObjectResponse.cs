@@ -9,4 +9,6 @@ public sealed record DispatcherObjectResponse(
     double Longitude,
     double Latitude,
     IReadOnlyList<string> Statuses,
-    int ChannelCount);
+    int ChannelCount,
+    IReadOnlyList<string> OwnStatuses,
+    int OwnChannelCount);

@@ -60,7 +60,7 @@ public sealed class DashboardQueryServiceTests
     }
 
     private static DispatcherObjectInfo Object(int id, IReadOnlyList<string> statuses)
-        => new(id, null, $"o{id}", 1, "district", 0, 0, statuses, 0);
+        => new(id, null, $"o{id}", 1, "district", 0, 0, statuses, 0, [], 0);
 
     private sealed class StubDispatcherObjectRepository(
         IReadOnlyList<DispatcherObjectInfo> result) : IDispatcherObjectRepository

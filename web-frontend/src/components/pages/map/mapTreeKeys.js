@@ -18,8 +18,29 @@ export function ancestorKeys(objects, id) {
 }
 
 export function toMapMarkers(objects) {
-  return objects.map((object) => ({
-    id: object.id,
-    coordinates: [object.longitude, object.latitude],
-  }))
+  return objects.map((object) => {
+    const marker = {
+      id: object.id,
+      coordinates: [object.longitude, object.latitude],
+    }
+    const tone = mapOwnTone(object)
+    if (tone) {
+      marker.tone = tone
+    }
+    return marker
+  })
+}
+
+const NORMAL = 'Норма'
+
+export function mapOwnTone(object) {
+  const count = object?.ownChannelCount ?? 0
+  if (count === 0) {
+    return undefined
+  }
+  const statuses = object.ownStatuses ?? []
+  if (statuses.length === 0 || statuses.every((status) => status === NORMAL)) {
+    return 'ok'
+  }
+  return 'alert'
 }

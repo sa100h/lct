@@ -4,7 +4,7 @@ import { useLocation } from 'react-router-dom'
 import { AuthHttpError } from '@/api/auth.js'
 import { listDispatcherObjects } from '@/api/dispatcherObjects.js'
 import { buildObjectTree } from '@/components/pages/prediction/buildObjectTree.js'
-import { ancestorKeys, rootExpandedKeys, toMapMarkers } from './mapTreeKeys.js'
+import { ancestorKeys, mapOwnTone, rootExpandedKeys, toMapMarkers } from './mapTreeKeys.js'
 import { formatObjectCount } from '@/components/objectTree/formatObjectCount.js'
 import { parseMapObjectId } from './mapObjectQuery.js'
 import YandexMap from './YandexMap.jsx'
@@ -134,6 +134,16 @@ export default function MapPage() {
               treeData={treeData}
               selectedKeys={selectedId == null ? [] : [String(selectedId)]}
               expandedKeys={expandedKeys}
+              titleRender={(node) => {
+                const current = objects.find((item) => String(item.id) === node.key)
+                const tone = mapOwnTone(current)
+                return (
+                  <span className="map-tree-node">
+                    {tone ? <span className={`map-tree-dot map-tree-dot-${tone}`} /> : null}
+                    <span className="map-tree-label">{node.title}</span>
+                  </span>
+                )
+              }}
               onExpand={(keys) => setExpandedKeys(keys)}
               onSelect={(keys) => {
                 if (keys.length === 0) {

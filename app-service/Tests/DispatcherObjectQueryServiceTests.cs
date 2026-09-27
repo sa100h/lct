@@ -20,7 +20,9 @@ public sealed class DispatcherObjectQueryServiceTests
                 37.50,
                 55.61,
                 ["Норма", "Тревога"],
-                42)
+                42,
+                ["Норма"],
+                3)
         ];
         var repository = new StubDispatcherObjectRepository(expected);
         var service = new DispatcherObjectQueryService(repository);
