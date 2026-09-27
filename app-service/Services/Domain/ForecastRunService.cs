@@ -4,6 +4,7 @@ namespace AppService.Services.Domain;
 
 public sealed class ForecastRunService(
     IForecastJournalRepository repository,
+    IForecastChannelRepository channels,
     TimeProvider timeProvider) : IForecastRunService
 {
     private const string Description = "Запуск прогнозирования";
@@ -44,11 +45,20 @@ public sealed class ForecastRunService(
             }
         }
 
+        var now = timeProvider.GetUtcNow();
+        var readings = await channels.GetLatestForObjectsAsync(
+            normalizedObjectIds, now.AddDays(-1), now, cancellationToken);
+        if (readings.Count == 0)
+        {
+            throw new ArgumentException("No sensor readings in the last 24 hours for the selected objects.");
+        }
+
         return await repository.CreateAsync(
             userId,
             Description,
+            readings,
             normalizedObjectIds,
-            timeProvider.GetUtcNow(),
+            now,
             cancellationToken);
     }
 }

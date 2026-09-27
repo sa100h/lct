@@ -42,6 +42,7 @@ public sealed class NpgsqlForecastJournalRepository(string connectionString) : I
     public async Task<ForecastJournalEntry> CreateAsync(
         Guid userId,
         string description,
+        IReadOnlyDictionary<int, string> channelReadings,
         IReadOnlyList<int>? dispatcherObjectIds,
         DateTimeOffset createdAt,
         CancellationToken cancellationToken = default)
@@ -50,17 +51,15 @@ public sealed class NpgsqlForecastJournalRepository(string connectionString) : I
         await connection.OpenAsync(cancellationToken);
         await using var command = new NpgsqlCommand("""
             INSERT INTO forecast_journal
-                (description, user_created_id, forecast_objects, creation_time)
+                (description, user_created_id, forecast_channels, creation_time, run_type)
             VALUES
-                (@description, @userId, @forecastObjects, @creationTime)
+                (@description, @userId, @forecastChannels, @creationTime, 'manual')
             RETURNING id
             """, connection);
         command.Parameters.AddWithValue("description", NpgsqlDbType.Text, description);
         command.Parameters.AddWithValue("userId", NpgsqlDbType.Uuid, userId);
-        var forecastObjectsParameter = command.Parameters.Add("forecastObjects", NpgsqlDbType.Json);
-        forecastObjectsParameter.Value = dispatcherObjectIds is null
-            ? DBNull.Value
-            : JsonSerializer.Serialize(dispatcherObjectIds);
+        command.Parameters.AddWithValue(
+            "forecastChannels", NpgsqlDbType.Jsonb, JsonSerializer.Serialize(channelReadings));
         command.Parameters.AddWithValue(
             "creationTime",
             NpgsqlDbType.Timestamp,
@@ -107,7 +106,7 @@ public sealed class NpgsqlForecastJournalRepository(string connectionString) : I
 
         const string filters = """
             FROM forecast_journal j
-            JOIN users u ON u.id = j.user_created_id
+            LEFT JOIN users u ON u.id = j.user_created_id
             WHERE (@createdBy::uuid IS NULL OR j.user_created_id = @createdBy)
               AND (@fromDate::date IS NULL OR j.creation_time::date >= @fromDate)
               AND (@toDate::date IS NULL OR j.creation_time::date <= @toDate)
@@ -121,11 +120,11 @@ public sealed class NpgsqlForecastJournalRepository(string connectionString) : I
 
         await using var listCommand = connection.CreateCommand();
         listCommand.CommandText = $"""
-            SELECT j.id, j.creation_time, u.login, j.start_composition_time, j.end_composition_time,
-                CASE
-                    WHEN j.forecast_objects IS NULL THEN (SELECT COUNT(*)::int FROM dispatcher_objects)
-                    ELSE jsonb_array_length(j.forecast_objects::jsonb)
-                END
+            SELECT j.id, j.creation_time, COALESCE(u.login, 'Автоматически'),
+                   j.start_composition_time, j.end_composition_time,
+                   (SELECT COUNT(DISTINCT channel.dispatcher_object_id)::int
+                    FROM jsonb_object_keys(j.forecast_channels) AS key(channel_id)
+                    JOIN sensor_channels channel ON channel.id = key.channel_id::int)
             {filters}
             ORDER BY j.creation_time DESC, j.id DESC
             OFFSET @offset LIMIT @limit
@@ -157,9 +156,13 @@ public sealed class NpgsqlForecastJournalRepository(string connectionString) : I
         await using var connection = new NpgsqlConnection(connectionString);
         await connection.OpenAsync(cancellationToken);
         await using var command = new NpgsqlCommand("""
-            SELECT j.id, j.creation_time, u.login, j.start_composition_time, j.end_composition_time, j.forecast_objects
+            SELECT j.id, j.creation_time, COALESCE(u.login, 'Автоматически'),
+                   j.start_composition_time, j.end_composition_time,
+                   ARRAY(SELECT DISTINCT channel.dispatcher_object_id
+                         FROM jsonb_object_keys(j.forecast_channels) AS key(channel_id)
+                         JOIN sensor_channels channel ON channel.id = key.channel_id::int)
             FROM forecast_journal j
-            JOIN users u ON u.id = j.user_created_id
+            LEFT JOIN users u ON u.id = j.user_created_id
             WHERE j.id = @id
             """, connection);
         command.Parameters.AddWithValue("id", id);
@@ -170,19 +173,13 @@ public sealed class NpgsqlForecastJournalRepository(string connectionString) : I
             return null;
         }
 
-        IReadOnlyList<int>? objectIds = null;
-        if (!reader.IsDBNull(5))
-        {
-            objectIds = JsonSerializer.Deserialize<int[]>(reader.GetFieldValue<string>(5));
-        }
-
         return new ForecastHistoryHeader(
             reader.GetGuid(0),
             ReadUtc(reader, 1),
             reader.GetString(2),
             ReadUtcOrNull(reader, 3),
             ReadUtcOrNull(reader, 4),
-            objectIds);
+            reader.GetFieldValue<int[]>(5));
     }
 
     private static void AddListParameters(

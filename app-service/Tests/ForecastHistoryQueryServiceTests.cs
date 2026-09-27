@@ -88,6 +88,29 @@ public sealed class ForecastHistoryQueryServiceTests
         Assert.Null(detail);
     }
 
+    [Fact]
+    public async Task GetByIdAsync_IncludesAncestorsOfChannelObjects()
+    {
+        var id = Guid.NewGuid();
+        var journal = new StubForecastJournalRepository
+        {
+            Header = new ForecastHistoryHeader(id, DateTimeOffset.UtcNow, "Автоматически", null, null, [3]),
+        };
+        var objects = new StubDispatcherObjectRepository(
+        [
+            new DispatcherObjectInfo(1, null, "root", 1, "district", 37.45, 55.6, [], 0),
+            new DispatcherObjectInfo(2, 1, "parent", 1, "district", 37.45, 55.6, [], 0),
+            new DispatcherObjectInfo(3, 2, "sensor object", 1, "district", 37.45, 55.6, [], 0),
+            new DispatcherObjectInfo(4, 1, "unrelated", 1, "district", 37.45, 55.6, [], 0),
+        ]);
+        var service = new ForecastHistoryQueryService(journal, objects);
+
+        var detail = await service.GetByIdAsync(id, TestContext.Current.CancellationToken);
+
+        Assert.NotNull(detail);
+        Assert.Equal([1, 2, 3], detail.Objects.Select(item => item.Id));
+    }
+
     private static DispatcherObjectInfo Object(int id)
         => new(id, null, $"o{id}", 1, "district", 37.45, 55.6, [], 0);
 
@@ -115,6 +138,7 @@ public sealed class ForecastHistoryQueryServiceTests
         public Task<ForecastJournalEntry> CreateAsync(
             Guid userId,
             string description,
+            IReadOnlyDictionary<int, string> channelReadings,
             IReadOnlyList<int>? dispatcherObjectIds,
             DateTimeOffset createdAt,
             CancellationToken cancellationToken = default)

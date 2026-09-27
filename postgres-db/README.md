@@ -17,6 +17,7 @@
 | `migrations/app_db/016_2_add_data_dictionary_channels.sql` | один раз через migrator | тестовые каналы датчиков |
 | `migrations/app_db/017_add_data_dictionary.sql` | один раз через migrator | тестовый статус заявки |
 | `migrations/app_db/018_dispatcher_object_coordinates.sql` | один раз через migrator | раздельные `latitude`/`longitude` и тестовые координаты |
+| `migrations/app_db/019_forecast_channels_and_connectivity.sql` | один раз через migrator | карта каналов и показаний в журнале, тип запуска, часовая уникальность и статус «Нет связи» |
 
 Скрипты из `init/` — штатный механизм Postgres (`/docker-entrypoint-initdb.d`),
 срабатывают только при пустом volume. Миграции из `migrations/` применяются самим
@@ -26,6 +27,7 @@ app-service (`shared/DatabaseMigration/PostgresMigrator.cs`), idempotentно.
 
 - **app_db**: бизнес-таблицы приложения, включая `equipment`, `alarms`,
   `events_log`, `predictions` и `maintenance_requests`.
+- Полное описание конечной схемы `app_db` — [`docs/database-schema.md`](docs/database-schema.md): таблицы, колонки, связи, ограничения, индексы, триггеры, начальные данные и история миграций.
 - Диаграммы ER и ролей — в каталоге `docs/`.
 
 ## Настройки

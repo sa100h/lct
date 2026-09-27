@@ -11,7 +11,7 @@ public sealed class ForecastRunServiceTests
     {
         var repository = new RecordingForecastJournalRepository();
         var now = new DateTimeOffset(2026, 9, 25, 10, 30, 0, TimeSpan.Zero);
-        var service = new ForecastRunService(repository, new FixedTimeProvider(now));
+        var service = new ForecastRunService(repository, new RecordingForecastChannelRepository(), new FixedTimeProvider(now));
         var userId = Guid.NewGuid();
 
         var entry = await service.RunAsync(userId, null, TestContext.Current.CancellationToken);
@@ -19,6 +19,7 @@ public sealed class ForecastRunServiceTests
         Assert.Equal(userId, repository.UserId);
         Assert.Equal("Запуск прогнозирования", repository.Description);
         Assert.Null(repository.DispatcherObjectIds);
+        Assert.Equal("1", repository.ChannelReadings?[120578]);
         Assert.Equal(now, entry.CreatedAt);
     }
 
@@ -26,7 +27,7 @@ public sealed class ForecastRunServiceTests
     public async Task RunAsync_NormalizesAndValidatesSelectedObjects()
     {
         var repository = new RecordingForecastJournalRepository();
-        var service = new ForecastRunService(repository, new FixedTimeProvider(DateTimeOffset.UtcNow));
+        var service = new ForecastRunService(repository, new RecordingForecastChannelRepository(), new FixedTimeProvider(DateTimeOffset.UtcNow));
 
         await service.RunAsync(
             Guid.NewGuid(),
@@ -41,7 +42,7 @@ public sealed class ForecastRunServiceTests
     public async Task RunAsync_RejectsUnknownObjectsWithoutCreatingJournal()
     {
         var repository = new RecordingForecastJournalRepository { MissingObjectIds = [999] };
-        var service = new ForecastRunService(repository, new FixedTimeProvider(DateTimeOffset.UtcNow));
+        var service = new ForecastRunService(repository, new RecordingForecastChannelRepository(), new FixedTimeProvider(DateTimeOffset.UtcNow));
 
         var exception = await Assert.ThrowsAsync<ArgumentException>(() => service.RunAsync(
             Guid.NewGuid(),
@@ -56,12 +57,25 @@ public sealed class ForecastRunServiceTests
     public async Task RunAsync_RejectsEmptySelection()
     {
         var repository = new RecordingForecastJournalRepository();
-        var service = new ForecastRunService(repository, new FixedTimeProvider(DateTimeOffset.UtcNow));
+        var service = new ForecastRunService(repository, new RecordingForecastChannelRepository(), new FixedTimeProvider(DateTimeOffset.UtcNow));
 
         await Assert.ThrowsAsync<ArgumentException>(() => service.RunAsync(
             Guid.NewGuid(),
             [],
             TestContext.Current.CancellationToken));
+
+        Assert.Null(repository.UserId);
+    }
+
+    [Fact]
+    public async Task RunAsync_RejectsSelectionWithoutRecentReadings()
+    {
+        var repository = new RecordingForecastJournalRepository();
+        var channels = new RecordingForecastChannelRepository { Readings = new Dictionary<int, string>() };
+        var service = new ForecastRunService(repository, channels, new FixedTimeProvider(DateTimeOffset.UtcNow));
+
+        await Assert.ThrowsAsync<ArgumentException>(() => service.RunAsync(
+            Guid.NewGuid(), [20], TestContext.Current.CancellationToken));
 
         Assert.Null(repository.UserId);
     }
@@ -73,6 +87,7 @@ public sealed class ForecastRunServiceTests
         public Guid? UserId { get; private set; }
         public string? Description { get; private set; }
         public IReadOnlyList<int>? DispatcherObjectIds { get; private set; }
+        public IReadOnlyDictionary<int, string>? ChannelReadings { get; private set; }
 
         public Task<IReadOnlyList<int>> FindMissingDispatcherObjectIdsAsync(
             IReadOnlyCollection<int> dispatcherObjectIds,
@@ -85,6 +100,7 @@ public sealed class ForecastRunServiceTests
         public Task<ForecastJournalEntry> CreateAsync(
             Guid userId,
             string description,
+            IReadOnlyDictionary<int, string> channelReadings,
             IReadOnlyList<int>? dispatcherObjectIds,
             DateTimeOffset createdAt,
             CancellationToken cancellationToken = default)
@@ -92,6 +108,7 @@ public sealed class ForecastRunServiceTests
             UserId = userId;
             Description = description;
             DispatcherObjectIds = dispatcherObjectIds;
+            ChannelReadings = channelReadings;
             return Task.FromResult(new ForecastJournalEntry(Guid.NewGuid(), createdAt, dispatcherObjectIds));
         }
 
@@ -112,6 +129,20 @@ public sealed class ForecastRunServiceTests
             Guid id,
             CancellationToken cancellationToken = default)
             => throw new NotSupportedException();
+    }
+
+    private sealed class RecordingForecastChannelRepository : IForecastChannelRepository
+    {
+        public IReadOnlyDictionary<int, string> Readings { get; init; } =
+            new Dictionary<int, string> { [120578] = "1" };
+
+        public Task<IReadOnlyDictionary<int, string>> GetLatestForObjectsAsync(
+            IReadOnlyCollection<int>? dispatcherObjectIds,
+            DateTimeOffset from,
+            DateTimeOffset to,
+            CancellationToken cancellationToken = default)
+            => Task.FromResult(Readings);
+
     }
 
     private sealed class FixedTimeProvider(DateTimeOffset now) : TimeProvider

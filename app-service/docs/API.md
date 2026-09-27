@@ -285,8 +285,10 @@ curl -k https://localhost/api/app/dashboard \
 
 ### `POST /forecasts/run`
 
-Нужны JWT и permission `module.prediction`. Создаёт необработанную запись в `forecast_journal`. Эндпоинт пока
-не вызывает ML-сервис и не пишет в технические ML-таблицы. Значения
+Нужны JWT и permission `module.prediction`. Создаёт запись `manual` в `forecast_journal`.
+Выбранные объекты разворачиваются в каналы, включая каналы дочерних объектов.
+Для каждого канала в `forecast_channels` записывается последнее ненулевое текстовое
+`sensor_value` из `events_log` за 24 часа до запуска. Эндпоинт не вызывает ML-сервис. Значения
 `start_composition_time` и `end_composition_time` остаются `NULL`.
 
 **Тело**
@@ -298,7 +300,8 @@ curl -k https://localhost/api/app/dashboard \
 ```
 
 `dispatcherObjectIds: null` означает запуск для всех диспетчерских объектов.
-Пустой массив и неизвестные идентификаторы возвращают `400 Bad Request`.
+Пустой массив, неизвестные идентификаторы и отсутствие показаний за 24 часа
+возвращают `400 Bad Request` без создания записи журнала.
 Повторяющиеся идентификаторы удаляются, итоговый список сортируется.
 
 **Ответ 202**
@@ -312,8 +315,12 @@ curl -k https://localhost/api/app/dashboard \
 }
 ```
 
-ID создателя берётся из `sub` текущего JWT. В `forecast_objects` сохраняется
-JSON-массив выбранных объектов либо SQL `NULL` для всех объектов.
+ID создателя берётся из `sub` текущего JWT. В `forecast_channels` сохраняется
+JSONB-объект вида `{"120578":"23.5"}`. Ключ — `sensor_channels.id`, значение —
+текст из `events_log.sensor_value`. При автоматическом запуске `user_created_id`
+равен SQL `NULL`, а `run_type` равен `auto`. `app-service` раз в час создаёт такую
+запись для всех каналов с показаниями за 24 часа; пустой запуск пропускается.
+В том же проходе каналы без показаний получают статус «Нет связи», остальные — «Норма».
 
 ### `GET /forecasts/authors`
 
@@ -343,7 +350,7 @@ Query:
 
 `page < 1` или `pageSize < 1`, битый uuid/дата — `400`. Сортировка: `creation_time DESC`, `id DESC`.
 
-Статус: `pending` / `running` / `done` (как на дашборде). `objectCount` — длина `forecast_objects` либо число всех `dispatcher_objects`, если в журнале `NULL`.
+Статус: `pending` / `running` / `done` (как на дашборде). `objectCount` — число уникальных объектов, которым принадлежат каналы из `forecast_channels`. Для автоматической записи `authorLogin` равен `Автоматически`.
 
 **Ответ 200**
 
@@ -366,7 +373,8 @@ Query:
 
 Нужны JWT и permission `module.history`. Деталь запуска: объекты с координатами и `hasHighRisk` (пока всегда `false`).
 
-Если `forecast_objects` is `NULL` — все диспетчерские объекты.
+Список объектов строится по каналам из `forecast_channels` и включает их объекты-предки,
+чтобы сохранить дерево истории.
 
 **Ответ 200**
 

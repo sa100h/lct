@@ -11,6 +11,7 @@ public interface IForecastJournalRepository
     Task<ForecastJournalEntry> CreateAsync(
         Guid userId,
         string description,
+        IReadOnlyDictionary<int, string> channelReadings,
         IReadOnlyList<int>? dispatcherObjectIds,
         DateTimeOffset createdAt,
         CancellationToken cancellationToken = default);

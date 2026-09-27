@@ -56,9 +56,18 @@ public sealed class ForecastHistoryQueryService(
         }
 
         var all = await objects.GetAllWithDescendantStatusesAsync(cancellationToken);
-        var selected = header.DispatcherObjectIds is null
-            ? all
-            : all.Where(item => header.DispatcherObjectIds.Contains(item.Id)).ToArray();
+        var byId = all.ToDictionary(item => item.Id);
+        var includedIds = new HashSet<int>();
+        foreach (var objectId in header.DispatcherObjectIds ?? [])
+        {
+            int? currentId = objectId;
+            while (currentId is int ancestorId && byId.TryGetValue(ancestorId, out var current)
+                   && includedIds.Add(ancestorId))
+            {
+                currentId = current.ParentId;
+            }
+        }
+        var selected = all.Where(item => includedIds.Contains(item.Id));
 
         var mapped = selected
             .Select(item => new ForecastHistoryObject(
