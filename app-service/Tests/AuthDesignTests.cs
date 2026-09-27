@@ -89,9 +89,8 @@ public sealed class AuthDesignTests
         Assert.Equal(
             [
                 PermissionCodes.DemoAccess,
-                PermissionCodes.ModuleMap,
-                PermissionCodes.ModulePrediction,
-                PermissionCodes.ModuleHistory
+                PermissionCodes.ModuleDashboard,
+                PermissionCodes.ModuleMap
             ],
             catalog.GetPermissions("technician"));
     }
@@ -112,15 +111,15 @@ public sealed class AuthDesignTests
         new RoleDefinition("technician", "CN=Technics,OU=Groups,DC=lct,DC=ru",
         [
             PermissionCodes.DemoAccess,
-            PermissionCodes.ModuleMap,
-            PermissionCodes.ModulePrediction,
-            PermissionCodes.ModuleHistory
+            PermissionCodes.ModuleDashboard,
+            PermissionCodes.ModuleMap
         ]),
         new RoleDefinition("dispatcher_ods", "CN=Dispetchers_ODS,OU=Groups,DC=lct,DC=ru",
         [
             PermissionCodes.DemoAccess,
             PermissionCodes.ModuleDashboard,
             PermissionCodes.ModuleMap,
+            PermissionCodes.ModuleHistory,
             PermissionCodes.ModuleNotifications,
             PermissionCodes.ModuleReports
         ]),
@@ -128,6 +127,7 @@ public sealed class AuthDesignTests
         [
             PermissionCodes.DemoAccess,
             PermissionCodes.ModuleMap,
+            PermissionCodes.ModuleHistory,
             PermissionCodes.ModuleNotifications
         ])
     ]);
@@ -236,19 +236,20 @@ public sealed class AuthDesignTests
             catalog.GetPermissions("admin"));
         Assert.Equal(
             [
-                PermissionCodes.DemoAccess, PermissionCodes.ModuleMap,
-                PermissionCodes.ModulePrediction, PermissionCodes.ModuleHistory
+                PermissionCodes.DemoAccess, PermissionCodes.ModuleDashboard,
+                PermissionCodes.ModuleMap
             ],
             catalog.GetPermissions("technician"));
         Assert.Equal(
             [
                 PermissionCodes.DemoAccess, PermissionCodes.ModuleDashboard,
-                PermissionCodes.ModuleMap, PermissionCodes.ModuleNotifications, PermissionCodes.ModuleReports
+                PermissionCodes.ModuleMap, PermissionCodes.ModuleHistory,
+                PermissionCodes.ModuleNotifications, PermissionCodes.ModuleReports
             ],
             catalog.GetPermissions("dispatcher_ods"));
         Assert.Equal(
             [
-                PermissionCodes.DemoAccess, PermissionCodes.ModuleMap,
+                PermissionCodes.DemoAccess, PermissionCodes.ModuleMap, PermissionCodes.ModuleHistory,
                 PermissionCodes.ModuleNotifications
             ],
             catalog.GetPermissions("dispatcher_district"));
@@ -269,13 +270,13 @@ public sealed class AuthDesignTests
              "module.history", "module.notifications", "module.reports", "module.settings"],
             Read("admin"));
         Assert.Equal(
-            ["demo.access", "module.map", "module.prediction", "module.history"],
+            ["demo.access", "module.dashboard", "module.map"],
             Read("technician"));
         Assert.Equal(
-            ["demo.access", "module.dashboard", "module.map", "module.notifications", "module.reports"],
+            ["demo.access", "module.dashboard", "module.map", "module.history", "module.notifications", "module.reports"],
             Read("dispatcher_ods"));
         Assert.Equal(
-            ["demo.access", "module.map", "module.notifications"],
+            ["demo.access", "module.map", "module.history", "module.notifications"],
             Read("dispatcher_district"));
     }
 }

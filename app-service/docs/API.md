@@ -17,9 +17,9 @@ JSON: `Content-Type: application/json`, имена полей **camelCase**.
 | Роль JWT | `module.*` |
 |---|---|
 | `admin` | home, dashboard, map, prediction, history, notifications, reports, settings |
-| `technician` | home, map, prediction, history |
-| `dispatcher_ods` | home, dashboard, map, notifications, reports |
-| `dispatcher_district` | home, map, notifications |
+| `technician` | home, dashboard, map |
+| `dispatcher_ods` | home, dashboard, map, history, notifications, reports |
+| `dispatcher_district` | home, map, history, notifications |
 
 В поле `login` — `sAMAccountName` без домена. Демо-учётки создаёт `ad/init/01-users-groups.sh` (стенд, не для продакшена):
 
@@ -549,7 +549,7 @@ curl -k -X POST https://localhost/api/app/predict \
 ```json
 {
   "role": "technician",
-  "permissions": ["demo.access", "module.map", "module.prediction", "module.history"]
+  "permissions": ["demo.access", "module.dashboard", "module.map"]
 }
 ```
 
