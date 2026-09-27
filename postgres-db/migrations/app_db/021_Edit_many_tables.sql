@@ -35,7 +35,7 @@ ALTER TABLE sensor_features DROP COLUMN channel_id;
 
 
 --Журнал прогнозов
-ALTER TABLE forecast_journal ADD COLUMN params json;
+ALTER TABLE forecast_journal ADD COLUMN params JSONB;
 ALTER TABLE forecast_journal ADD COLUMN status text;
 
 
