@@ -1,6 +1,6 @@
 # Схема базы данных `app_db`
 
-Документ описывает структуру, получаемую при применении SQL-файлов из `postgres-db/migrations/app_db` в лексикографическом порядке. Он объединяет изменения из разных миграций в одно описание конечной схемы. Первичный источник структуры — миграции; описание сценариев сверено с SQL-кодом `app-service` и `ml-broker`.
+Документ описывает структуру, получаемую после успешного применения SQL-файлов из `postgres-db/migrations/app_db` в лексикографическом порядке. Он объединяет изменения из разных миграций в одно описание конечной схемы. Источник структуры — SQL-миграции; ограничения применения `021` описаны ниже.
 
 > Это описание схемы репозитория, а не снимок конкретного окружения. В самой базе могут быть дополнительные ручные изменения или иные данные справочников. Дата подготовки: 2026-09-27.
 
@@ -13,8 +13,8 @@
 - [Справочники датчиков и журнал событий](#справочники-датчиков-и-журнал-событий)
 - [Прогнозы и история прогнозирования](#прогнозы-и-история-прогнозирования)
 - [Заявки](#заявки)
-- [LCT: оборудование, тревоги и обслуживание](#lct-оборудование-тревоги-и-обслуживание)
-- [ML-брокер и канал данных](#ml-брокер-и-канал-данных)
+- [Тревоги и обслуживание датчиков](#тревоги-и-обслуживание-датчиков)
+- [ML-брокер](#ml-брокер)
 - [Индексы, функции и триггеры](#индексы-функции-и-триггеры)
 - [Начальные данные и сидирование](#начальные-данные-и-сидирование)
 - [История изменений схемы](#история-изменений-схемы)
@@ -22,7 +22,7 @@
 
 ## Обзор и группы таблиц
 
-База `app_db` используется несколькими подсистемами. Таблицы не всегда связаны внешними ключами: в частности, часть LCT/ML-таблиц — отдельный контур, а некоторые соответствия идентификаторов намеренно остаются на уровне приложения.
+База `app_db` используется несколькими подсистемами. Таблицы не всегда связаны внешними ключами: в частности, `alarms` и таблицы ML-брокера остаются отдельным контуром, а некоторые соответствия идентификаторов задаются на уровне приложения.
 
 | Группа | Таблицы | Назначение |
 |---|---|---|
@@ -30,10 +30,10 @@
 | Идентификация | `users`, `refresh_tokens` | Локальные учётные записи и ротация refresh-токенов |
 | Справочники и события | `engineering_systems`, `sensor_types`, `object_types`, `dispatcher_objects`, `sensor_statuses`, `sensor_channels`, `events_log` | Иерархия объектов, каналы датчиков и поступившие значения |
 | Прогнозы и заявки диспетчеризации | `forecast_journal`, `forecast_results`, `forecast_events_link`, `request_statuses`, `requests` | Запуски прогноза, результаты, связи с событиями и заявки |
-| LCT-домен и ML | `equipment`, `alarms`, `predictions`, `maintenance_requests` | Реестр оборудования, тревоги, ML-предсказания и обслуживание |
-| ML-брокер и сопоставление | `sensor_features`, `ml_predict_queue`, `ml_schedule`, `ml_retrain_runs`, `channel_directory`, `equipment_channel_map` | Входные признаки, очередь, расписания, справочник каналов и сопоставление с оборудованием |
+| Тревоги и обслуживание | `alarms`, `sensor_maintenance` | Срабатывания из LCT-контура и обслуживание каналов |
+| ML-брокер | `ml_predict_queue`, `ml_schedule`, `ml_retrain_runs` | Очередь предсказаний, расписания и журнал переобучения |
 
-В перечислении 25 прикладных таблиц; `__schema_migrations` создаётся мигратором отдельно. Внешние ключи и индексы описаны в карточках таблиц ниже.
+В перечислении 20 прикладных таблиц; `__schema_migrations` создаётся мигратором отдельно. Миграция `021` удаляет `equipment_channel_map`, `channel_directory`, `maintenance_requests`, `predictions`, `sensor_features` и `equipment`; добавляет `sensor_maintenance`. Внешние ключи и индексы описаны в карточках таблиц ниже.
 
 ## Связи между таблицами
 
@@ -48,6 +48,7 @@ erDiagram
     dispatcher_objects ||--o{ sensor_channels : "dispatcher_object_id"
     sensor_statuses ||--o{ sensor_channels : "sensor_status_id"
     sensor_channels ||--o{ events_log : "sensor_channel_id"
+    sensor_channels ||--o{ sensor_maintenance : "sensor_channel_id"
     users o|--o{ forecast_journal : "user_created_id"
     forecast_journal ||--o{ forecast_results : "forecast_journal_id"
     dispatcher_objects ||--o{ forecast_results : "dispatcher_object_id"
@@ -58,12 +59,9 @@ erDiagram
     users ||--o{ requests : "user_dispatcher_id / user_technician_id"
     dispatcher_objects ||--o{ requests : "dispatcher_object_id"
     request_statuses ||--o{ requests : "request_status_id"
-    predictions o|--o{ maintenance_requests : "prediction_id"
-    channel_directory ||--o{ equipment_channel_map : "channel_id"
-    sensor_features ||--o{ ml_predict_queue : "channel_id + as_of; trigger, не FK"
 ```
 
-Связь `sensor_features` → `ml_predict_queue` создаётся триггером, поэтому на диаграмме она не является внешним ключом. `equipment_channel_map.equipment_external_id` логически ссылается на `equipment.external_id`, но SQL-внешнего ключа между ними нет. `sensor_features.channel_id`, `ml_predict_queue.subject_id`, `predictions.subject_id` и `channel_directory.channel_id` используют одну идентичность канала по договорённости producer/broker.
+`ml_predict_queue.subject_id` и `alarms.sensor_external_id` остаются текстовыми идентификаторами без внешнего ключа к `sensor_channels`. Триггер, ранее связывавший `sensor_features` с очередью, удалён вместе с таблицей `sensor_features`.
 
 ## Служебные таблицы миграций
 
@@ -194,6 +192,7 @@ erDiagram
 | `sensor_name` | `text` | нет | Отображаемое имя, не уникально после `015` |
 | `dispatcher_object_id` | `integer` | нет | FK → `dispatcher_objects.id` |
 | `sensor_status_id` | `integer` | нет | FK → `sensor_statuses.id` |
+| `loaded_at` | `timestamptz` | нет | DEFAULT `now()`; добавлена миграцией `021` |
 
 Индексы: `idx_sensor_channels_type (sensor_type_id)`, `idx_sensor_channels_object (dispatcher_object_id)`, `idx_sensor_channels_status (sensor_status_id)`. В отличие от версии схемы сразу после миграции `006`, имена каналов могут повторяться.
 
@@ -228,6 +227,8 @@ erDiagram
 | `end_composition_time` | `timestamp` | да | — | Завершение расчёта |
 | `run_type` | `text` | нет | DEFAULT `'manual'`; CHECK `manual` или `auto` | Тип запуска |
 | `scheduled_hour` | `timestamptz` | да | — | Плановый час для автоматического запуска |
+| `params` | `json` | да | — | Параметры запуска; структура JSON не ограничена |
+| `status` | `text` | да | — | Статус запуска; набор значений БД не ограничивает |
 
 Проверка `forecast_journal_origin_chk` связывает тип запуска и источник: `manual` требует `user_created_id IS NOT NULL` и `scheduled_hour IS NULL`; `auto` требует `user_created_id IS NULL` и `scheduled_hour IS NOT NULL`. FK автора имеет стандартное поведение удаления/обновления (NO ACTION). Индекс `idx_forecast_journal_creator (user_created_id)`. Частичный уникальный индекс `uq_forecast_journal_auto_hour (scheduled_hour) WHERE run_type = 'auto'` не позволяет записать более одного автоматического журнала на один час.
 
@@ -288,28 +289,13 @@ erDiagram
 | `dispatcher_object_id` | `integer` | нет | FK → `dispatcher_objects.id` | Объект заявки |
 | `execution_description` | `text` | нет | — | Описание выполнения; даже до выполнения поле обязательно |
 | `request_status_id` | `uuid` | нет | FK → `request_statuses.id` | Статус |
+| `priority` | `integer` | да | — | Приоритет; DEFAULT не задан |
+| `created_at` | `timestamptz` | нет | DEFAULT `now()` | Время добавления колонки или создания новой заявки |
+| `updated_at` | `timestamptz` | нет | DEFAULT `now()` | Время добавления колонки или создания новой заявки; автоматического обновления при `UPDATE` нет |
 
 Несмотря на комментарий в старом DDL «может быть NULL» у `forecast_id`, колонка объявлена `NOT NULL`. Индексы: `idx_requests_forecast (forecast_id)`, `idx_requests_dispatcher (user_dispatcher_id)`, `idx_requests_technician (user_technician_id)`, `idx_requests_object (dispatcher_object_id)`, `idx_requests_status (request_status_id)`.
 
-## LCT: оборудование, тревоги и обслуживание
-
-Этот набор создан миграцией `002_lct_domain.sql`. В миграциях он не соединён внешними ключами со справочниками диспетчерских каналов и событий; идентификаторы из внешнего реестра остаются текстовыми идентификаторами.
-
-### `equipment`
-
-Реестр оборудования.
-
-| Колонка | Тип | NULL | По умолчанию / ограничения | Значение |
-|---|---|---:|---|---|
-| `id` | `uuid` | нет | PK; `gen_random_uuid()` | Внутренний ID |
-| `category` | `text` | нет | — | Категория (`sensor`, `vent-shaft`, `pump`, `chamber`, `hatch` по комментарию DDL) |
-| `external_id` | `text` | нет | UNIQUE | ID внешнего реестра; в producer-контракте совпадает с ID канала |
-| `name` | `text` | да | — | Имя |
-| `address` | `text` | да | — | Адрес |
-| `district` | `text` | да | — | Район |
-| `commissioned_at` | `date` | да | — | Ввод в эксплуатацию |
-| `last_repair_at` | `date` | да | — | Последний ремонт |
-| `created_at` | `timestamptz` | нет | `now()` | Создание строки |
+## Тревоги и обслуживание датчиков
 
 ### `alarms`
 
@@ -327,95 +313,30 @@ erDiagram
 
 Индексы: `idx_alarms_sensor_time (sensor_external_id, occurred_at)`, `idx_alarms_occurred_at (occurred_at)`.
 
-### `predictions`
+### `sensor_maintenance`
 
-Результаты ML-предсказаний. `subject_id` в broker-контракте равен строковому ID канала.
-
-| Колонка | Тип | NULL | По умолчанию / ограничения | Значение |
-|---|---|---:|---|---|
-| `id` | `uuid` | нет | PK; `gen_random_uuid()` | ID результата |
-| `category` | `text` | нет | — | Категория модели; список в комментарии, CHECK нет |
-| `subject_id` | `text` | нет | — | Канал/субъект предсказания |
-| `risk_score` | `numeric(5,4)` | нет | — | Оценка риска |
-| `predicted_label` | `boolean` | нет | — | Бинарный прогноз |
-| `horizon_hours` | `integer` | нет | DEFAULT `24` | Горизонт прогноза |
-| `model_version` | `text` | да | — | Версия модели |
-| `predicted_at` | `timestamptz` | нет | `now()` | Время результата |
-| `feature_importance` | `jsonb` | да | — | Важности признаков |
-
-Уникальное ограничение `uq_predictions_dedup (category, subject_id, predicted_at)` обеспечивает идемпотентную запись результата. Индексы: `idx_predictions_category_time (category, predicted_at DESC)`, `idx_predictions_subject (subject_id, predicted_at DESC)`.
-
-### `maintenance_requests`
-
-Заявка на обслуживание, потенциально созданная по предсказанию.
+Записи об обслуживании каналов датчиков, добавленные миграцией `021`.
 
 | Колонка | Тип | NULL | По умолчанию / ограничения |
 |---|---|---:|---|
 | `id` | `uuid` | нет | PK; `gen_random_uuid()` |
-| `prediction_id` | `uuid` | да | FK → `predictions.id`, `ON DELETE SET NULL` |
-| `equipment_external_id` | `text` | да | —; FK к `equipment` отсутствует |
-| `status` | `text` | нет | DEFAULT `'draft'`; комментарий перечисляет `draft`, `created`, `dispatched`, `closed`, CHECK нет |
-| `priority` | `integer` | нет | DEFAULT `0` |
-| `reason` | `text` | да | — |
-| `created_at` | `timestamptz` | нет | `now()` |
-| `updated_at` | `timestamptz` | нет | `now()`; автоматическое обновление триггером не задано |
+| `sensor_channel_id` | `integer` | нет | FK → `sensor_channels.id` |
+| `note` | `text` | нет | — |
+| `mapped_at` | `timestamptz` | нет | DEFAULT `now()` |
 
-Индекс: `idx_maintenance_status (status, created_at DESC)`.
+Отдельного индекса на `sensor_channel_id` миграция не создаёт.
 
-## ML-брокер и канал данных
-
-### `channel_directory`
-
-Справочник каналов из реестра организатора, загружаемый скриптом `scripts/load_channel_directory.py`. Он определяет допустимый набор каналов для producer-а. Связь с `sensor_channels` по ID не задана SQL-ограничением.
-
-| Колонка | Тип | NULL | По умолчанию / ограничения |
-|---|---|---:|---|
-| `channel_id` | `text` | нет | PK |
-| `type_system` | `text` | да | — |
-| `type_sensor` | `text` | да | — |
-| `tag_cabinet` | `text` | да | — |
-| `object_id` | `text` | да | Идентификатор объекта внешнего справочника |
-| `sensor_name` | `text` | да | — |
-| `loaded_at` | `timestamptz` | нет | `now()` |
-
-Индекс: `idx_channel_directory_object (object_id)`.
-
-### `equipment_channel_map`
-
-Явно фиксирует подтверждённую пару между `equipment.external_id` и каналом. Первичный ключ разрешает повторить каждый элемент пары, но сам по себе не гарантирует строгую связь 1:1: несколько каналов могут иметь один `equipment_external_id`, а один `channel_id` может появляться с разными внешними ID. Producer-скрипт проверяет ожидаемое соответствие; внешнего ключа на `equipment` нет.
-
-| Колонка | Тип | NULL | По умолчанию / ограничения |
-|---|---|---:|---|
-| `equipment_external_id` | `text` | нет | Часть составного PK; логическое соответствие `equipment.external_id` |
-| `channel_id` | `text` | нет | Часть составного PK; FK → `channel_directory.channel_id` |
-| `note` | `text` | да | Комментарий к сопоставлению |
-| `mapped_at` | `timestamptz` | нет | `now()` |
-
-PK — пара `(equipment_external_id, channel_id)`. Индекс: `idx_equipment_channel_map_channel (channel_id)`.
-
-### `sensor_features`
-
-Входные признаки для моделей. Producer записывает одну строку на канал и момент наблюдения; пара `(channel_id, as_of)` уникальна для идемпотентной доставки.
-
-| Колонка | Тип | NULL | По умолчанию / ограничения |
-|---|---|---:|---|
-| `id` | `bigint` (`bigserial`) | нет | PK, последовательность |
-| `channel_id` | `text` | нет | —; равен broker `subject_id` и `channel_directory.channel_id` по контракту |
-| `as_of` | `timestamptz` | нет | —; ключ наблюдения |
-| `features` | `jsonb` | нет | Вектор признаков |
-| `created_at` | `timestamptz` | нет | `now()` |
-
-Уникальное ограничение `uq_sensor_features_channel_asof (channel_id, as_of)` добавлено миграцией `008`. Индекс `idx_sensor_features_channel (channel_id, as_of DESC)` поддерживает чтение последних наблюдений. Внешнего ключа `channel_id` к `channel_directory` нет; проверку существования канала описывает producer-контракт.
+## ML-брокер
 
 ### `ml_predict_queue`
 
-Долговечная очередь запросов на предсказание; именно таблица является источником истины, `NOTIFY` лишь будит слушателя.
+Долговечная очередь запросов на предсказание. После удаления `sensor_features` миграцией `021` триггер больше не пополняет её; новые задачи могут появиться только при отдельной записи в таблицу.
 
 | Колонка | Тип | NULL | По умолчанию / ограничения |
 |---|---|---:|---|
 | `id` | `bigint` (`bigserial`) | нет | PK, последовательность |
 | `category` | `text` | нет | Часть UNIQUE; допустимость не ограничена CHECK |
-| `subject_id` | `text` | нет | Часть UNIQUE; обычно равен `sensor_features.channel_id` |
+| `subject_id` | `text` | нет | Часть UNIQUE; внешний ключ к `sensor_channels` не задан |
 | `as_of` | `timestamptz` | нет | Часть UNIQUE; время входного наблюдения |
 | `priority` | `integer` | нет | DEFAULT `0` |
 | `status` | `text` | нет | DEFAULT `'pending'`; CHECK: `pending`, `running`, `done`, `failed` |
@@ -463,28 +384,22 @@ PK — пара `(equipment_external_id, channel_id)`. Индекс: `idx_equipm
 
 ## Индексы, функции и триггеры
 
-### `ml_enqueue_from_features()` и `trg_enqueue_features`
+### `ml_enqueue_from_features()`
 
-`005_ml_broker.sql` определяет триггерную функцию PostgreSQL `ml_enqueue_from_features()` и AFTER INSERT row-триггер `trg_enqueue_features` на `sensor_features`. Для каждой новой строки функция пытается создать в `ml_predict_queue` задачу на каждую категорию `sensor-failure`, `fire-risk`, `unauthorized-access`, `infrastructure-wear`. Конфликт дедупликации `(category, subject_id, as_of)` игнорируется. Затем отправляется `pg_notify('ml_predict', '1')`. Уведомление не хранит очередь; если worker перезапустился, он всё равно читает таблицу.
+`005_ml_broker.sql` создаёт функцию `ml_enqueue_from_features()`, которая ставила задачи в `ml_predict_queue` и отправляла `pg_notify('ml_predict', '1')` после вставки в `sensor_features`. Миграция `021` удаляет `sensor_features` вместе с её триггером `trg_enqueue_features`, но не удаляет саму функцию. В конечной схеме функция остаётся без триггера и с обращением к прежнему полю `NEW.channel_id`; автоматически наполнять очередь ей больше нечего.
 
 ### Каталог индексов
 
-Ниже перечислены именованные индексы, созданные миграциями; индексы первичных ключей и UNIQUE создаются PostgreSQL автоматически.
+Ниже перечислены именованные индексы, сохранившиеся после всех миграций; индексы первичных ключей и UNIQUE создаются PostgreSQL автоматически.
 
 | Индекс | Таблица / ключ | Назначение или условие |
 |---|---|---|
 | `idx_alarms_sensor_time` | `alarms(sensor_external_id, occurred_at)` | Поиск тревог по датчику и времени |
 | `idx_alarms_occurred_at` | `alarms(occurred_at)` | Выборка тревог по времени |
-| `idx_predictions_category_time` | `predictions(category, predicted_at DESC)` | Последние прогнозы категории |
-| `idx_predictions_subject` | `predictions(subject_id, predicted_at DESC)` | Последние прогнозы субъекта |
-| `idx_maintenance_status` | `maintenance_requests(status, created_at DESC)` | Заявки по статусу и дате |
 | `idx_refresh_tokens_family` | `refresh_tokens(family_id)` | Чтение семейства токенов |
 | `idx_refresh_tokens_user` | `refresh_tokens(user_id)` | Чтение токенов пользователя |
 | `uq_refresh_tokens_active_family` | `refresh_tokens(family_id)` UNIQUE partial | Только неиспользованные и неотозванные токены |
-| `idx_sensor_features_channel` | `sensor_features(channel_id, as_of DESC)` | Последние признаки канала |
 | `idx_queue_status_id` | `ml_predict_queue(status, id)` | Выборка очереди по статусу |
-| `idx_channel_directory_object` | `channel_directory(object_id)` | Каналы объекта |
-| `idx_equipment_channel_map_channel` | `equipment_channel_map(channel_id)` | Обратный поиск сопоставлений |
 | `idx_dispatcher_objects_parent` | `dispatcher_objects(parent_id)` | Дети объекта в иерархии |
 | `idx_dispatcher_objects_type` | `dispatcher_objects(object_type_id)` | Объекты по типу |
 | `idx_sensor_channels_type` | `sensor_channels(sensor_type_id)` | Каналы по типу датчика |
@@ -507,7 +422,7 @@ PK — пара `(equipment_external_id, channel_id)`. Индекс: `idx_equipm
 | `idx_requests_object` | `requests(dispatcher_object_id)` | Заявки объекта |
 | `idx_requests_status` | `requests(request_status_id)` | Заявки статуса |
 
-Также миграции создают UNIQUE-индексы/ограничения: `equipment.external_id`, `predictions(category, subject_id, predicted_at)`, `sensor_features(channel_id, as_of)`, `ml_schedule.name`, `ml_predict_queue(category, subject_id, as_of)`, уникальные имена справочников и `channel_directory.channel_id`.
+Также действуют UNIQUE-индексы/ограничения для `ml_schedule.name`, `ml_predict_queue(category, subject_id, as_of)`, `refresh_tokens.token_hash` и уникальных имён справочников (кроме отображаемых имён объектов и каналов, освобождённых миграцией `015`).
 
 ## Начальные данные и сидирование
 
@@ -519,9 +434,9 @@ PK — пара `(equipment_external_id, channel_id)`. Индекс: `idx_equipm
 - `018_dispatcher_object_coordinates.sql`: перезаписывает координаты загруженных объектов тестовыми координатами Москвы.
 - `019_forecast_channels_and_connectivity.sql`: статус `Нет связи`, если его ещё нет.
 - `postgres-db/README.md` описывает отдельную загрузку справочников event feeder из CSV командой `python scripts/seed_event_feed_references.py --apply`. Она работает с уже запущенным Compose PostgreSQL, не является миграцией схемы и в README характеризуется как тестовая загрузка.
-- Для ML-справочника каналов и таблицы сопоставления предусмотрены `scripts/load_channel_directory.py` и `scripts/map_equipment_channels.py`; их контракт также описан в `ml-broker/docs/producer.md`.
+- Скрипты `scripts/load_channel_directory.py` и `scripts/map_equipment_channels.py`, описанные в `ml-broker/docs/producer.md`, относятся к таблицам, которые удаляет `021`; после этой миграции их прежний контракт с БД неприменим.
 
-Начальные данные не следует путать с ограничениями: например, перечни категорий в комментариях к `alarms` и `predictions` не закреплены CHECK-ограничениями.
+Начальные данные не следует путать с ограничениями: например, перечень типов тревог в комментарии к `alarms` не закреплён CHECK-ограничением.
 
 ## История изменений схемы
 
@@ -544,19 +459,21 @@ PK — пара `(equipment_external_id, channel_id)`. Индекс: `idx_equipm
 | `017_add_data_dictionary.sql` | Добавляет стартовый статус «Новая» |
 | `018_dispatcher_object_coordinates.sql` | Переименовывает координату в широту, добавляет долготу и проверки диапазона |
 | `019_forecast_channels_and_connectivity.sql` | Обновляет JSON-снимок в журнале, добавляет тип/час запуска, статус отсутствия связи и составной индекс событий |
+| `021_Edit_many_tables.sql` | Добавляет `sensor_channels.loaded_at` и `sensor_maintenance`, поля журнала прогнозов и заявок; удаляет шесть таблиц прежнего LCT/ML-контура вместе с их индексами и триггером |
 
 В номерах есть пропуски и два файла с префиксом `016`; это допустимо: порядок фактически определяется полным именем файла, то есть `016_1` раньше `016_2`. Мигратор не использует номер как версию и не требует непрерывной последовательности.
 
 ## Эксплуатационные замечания
 
-1. **Временные типы отличаются.** События и ML-данные используют `timestamptz`; `forecast_journal.creation_time`, `start_composition_time`, `end_composition_time` остаются `timestamp without time zone`. Код репозитория трактует их как UTC, но схема сама это не гарантирует.
+1. **Временные типы отличаются.** События, даты заявок и ML-данные используют `timestamptz`; `forecast_journal.creation_time`, `start_composition_time`, `end_composition_time` остаются `timestamp without time zone`. Код репозитория трактует их как UTC, но схема сама это не гарантирует.
 2. **`019` очищает старые JSON-данные.** При переходе со старой колонки `forecast_objects` все записи получают `{}`. Сохранение прежнего содержимого потребовало бы отдельного бэкапа до миграции.
 3. **`requests.forecast_id` обязательна.** Комментарий в исходной миграции допускает NULL, но фактический DDL объявляет колонку `NOT NULL`.
 4. **Справочные ID в основном задаются извне.** `engineering_systems`, `sensor_types`, `object_types`, `dispatcher_objects`, `sensor_statuses`, `sensor_channels` используют `integer` без identity/sequence; импортёр должен передавать ID.
 5. **Строковые статусы и категории не всегда ограничены БД.** Там, где миграция задала только комментарий, БД принимает любые значения; перечень в комментарии — соглашение приложения.
-6. **Поведение удаления по умолчанию — NO ACTION.** Если у FK отдельно не указан `ON DELETE`, родительскую запись нельзя удалить, пока на неё ссылаются строки. Явное исключение в прикладных таблицах — `maintenance_requests.prediction_id ON DELETE SET NULL`.
-7. **Часть связей логическая.** В частности, LCT equipment ↔ directory channel и признаки ↔ directory channel сверяются контрактами/скриптами, а не всеми FK в базе.
-8. **Миграции — не обязательно идемпотентны сами по себе.** README называет запуск миграций идемпотентным благодаря `__schema_migrations`; многие DDL-операции создания таблиц без `IF NOT EXISTS` рассчитаны на запуск только через мигратор.
+6. **Поведение удаления по умолчанию — NO ACTION.** Если у FK отдельно не указан `ON DELETE`, родительскую запись нельзя удалить, пока на неё ссылаются строки.
+7. **`021` зависит от содержимого базы.** `ALTER TABLE sensor_features ADD COLUMN sensor_channel_id INT NOT NULL` не задаёт DEFAULT и выполняется до `UPDATE`. При наличии строк в `sensor_features` миграция завершится ошибкой до удаления таблиц; описанная здесь конечная схема тогда не будет получена. Если таблица пуста, последующий `UPDATE` ничего не меняет, а таблица в конце удаляется.
+8. **`021` удаляет данные шести таблиц.** Это `equipment_channel_map`, `channel_directory`, `maintenance_requests`, `predictions`, `sensor_features` и `equipment`. Мигратор выполняет файл в транзакции, поэтому при ошибке операции этого файла откатываются.
+9. **Миграции — не обязательно идемпотентны сами по себе.** README называет запуск миграций идемпотентным благодаря `__schema_migrations`; многие DDL-операции создания таблиц без `IF NOT EXISTS` рассчитаны на запуск только через мигратор.
 
 ## Где искать исходные определения
 
