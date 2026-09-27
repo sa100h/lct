@@ -4708,7 +4708,7 @@
     </mxGraphModel>
   </diagram>
   <diagram name="ERL_new" id="pTfTSlEMYdPT8B246N4V">
-    <mxGraphModel dx="2022" dy="2549" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="827" pageHeight="1169" math="0" shadow="0">
+    <mxGraphModel dx="1617" dy="2273" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="827" pageHeight="1169" math="0" shadow="0">
       <root>
         <mxCell id="zPAAU6YtRr33_l-Z0vzz-0" />
         <mxCell id="zPAAU6YtRr33_l-Z0vzz-1" parent="zPAAU6YtRr33_l-Z0vzz-0" />
@@ -5664,7 +5664,7 @@
           </mxGeometry>
         </mxCell>
         <mxCell id="zPAAU6YtRr33_l-Z0vzz-202" value="Статусы датчиков&lt;br&gt;&lt;i&gt;sensor_statuses&lt;/i&gt;" style="shape=table;startSize=40;container=1;collapsible=1;childLayout=tableLayout;fixedRows=1;rowLines=0;fontStyle=1;align=center;resizeLast=1;html=1;fillColor=#e3c800;fontColor=#000000;strokeColor=#B09500;" vertex="1" parent="zPAAU6YtRr33_l-Z0vzz-1">
-          <mxGeometry x="400" y="800" width="240" height="120" as="geometry">
+          <mxGeometry x="400" y="880" width="240" height="120" as="geometry">
             <mxRectangle x="750" y="710" width="220" height="40" as="alternateBounds" />
           </mxGeometry>
         </mxCell>
@@ -5698,7 +5698,7 @@
           <mxGeometry relative="1" as="geometry">
             <Array as="points">
               <mxPoint x="720" y="460" />
-              <mxPoint x="720" y="860" />
+              <mxPoint x="720" y="940" />
             </Array>
             <mxPoint x="440" y="410" as="sourcePoint" />
             <mxPoint x="330" y="410" as="targetPoint" />
@@ -6204,7 +6204,7 @@
           </mxGeometry>
         </mxCell>
         <mxCell id="zPAAU6YtRr33_l-Z0vzz-456" value="Обслуживание датчиков&lt;br&gt;&lt;i&gt;sensor_maintenance&lt;/i&gt;" style="shape=table;startSize=40;container=1;collapsible=1;childLayout=tableLayout;fixedRows=1;rowLines=0;fontStyle=1;align=center;resizeLast=1;html=1;fillColor=#e3c800;fontColor=#000000;strokeColor=#B09500;" vertex="1" parent="zPAAU6YtRr33_l-Z0vzz-1">
-          <mxGeometry x="1200" y="-70" width="240" height="200" as="geometry">
+          <mxGeometry x="1200" y="-240" width="240" height="200" as="geometry">
             <mxRectangle x="750" y="710" width="220" height="40" as="alternateBounds" />
           </mxGeometry>
         </mxCell>
@@ -6269,7 +6269,7 @@
           </mxGeometry>
         </mxCell>
         <mxCell id="zPAAU6YtRr33_l-Z0vzz-471" value="Характеристики датчика ( темп, ..)&lt;br&gt;&lt;i&gt;sensor_features&lt;/i&gt;" style="shape=table;startSize=40;container=1;collapsible=1;childLayout=tableLayout;fixedRows=1;rowLines=0;fontStyle=1;align=center;resizeLast=1;html=1;fillColor=#e3c800;fontColor=#000000;strokeColor=#B09500;" vertex="1" parent="zPAAU6YtRr33_l-Z0vzz-1">
-          <mxGeometry x="1200" y="-360" width="240" height="240" as="geometry">
+          <mxGeometry x="1200" y="-520" width="240" height="240" as="geometry">
             <mxRectangle x="750" y="710" width="220" height="40" as="alternateBounds" />
           </mxGeometry>
         </mxCell>
