@@ -74,9 +74,12 @@ public sealed class ForecastRunServiceTests
         var channels = new RecordingForecastChannelRepository { Readings = new Dictionary<int, string>() };
         var service = new ForecastRunService(repository, channels, new FixedTimeProvider(DateTimeOffset.UtcNow));
 
-        await Assert.ThrowsAsync<ArgumentException>(() => service.RunAsync(
+        var exception = await Assert.ThrowsAsync<ArgumentException>(() => service.RunAsync(
             Guid.NewGuid(), [20], TestContext.Current.CancellationToken));
 
+        Assert.Equal(
+            "Нет показаний датчиков за последние 24 часа для выбранных объектов.",
+            exception.Message);
         Assert.Null(repository.UserId);
     }
 

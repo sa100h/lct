@@ -50,7 +50,7 @@ public sealed class ForecastRunService(
             normalizedObjectIds, now.AddDays(-1), now, cancellationToken);
         if (readings.Count == 0)
         {
-            throw new ArgumentException("No sensor readings in the last 24 hours for the selected objects.");
+            throw new ArgumentException("Нет показаний датчиков за последние 24 часа для выбранных объектов.");
         }
 
         return await repository.CreateAsync(

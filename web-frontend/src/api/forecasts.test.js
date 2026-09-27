@@ -12,8 +12,8 @@ test('formatForecastStartedMessage uses local time and fixed copy', () => {
 
 test('forecastErrorMessage prefers API error text on 400', () => {
   assert.equal(
-    forecastErrorMessage(400, { error: 'Unknown dispatcher object ids: 1' }),
-    'Unknown dispatcher object ids: 1',
+    forecastErrorMessage(400, { error: 'Нет показаний датчиков за последние 24 часа для выбранных объектов.' }),
+    'Нет показаний датчиков за последние 24 часа для выбранных объектов.',
   )
 })
 
