@@ -5,6 +5,15 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PIP_NO_CACHE_DIR=1
 
+# lightgbm links its native lib against libgomp (the GCC OpenMP runtime).
+# python:3.11-slim does not ship libgomp, so `import lightgbm` fails at
+# runtime with "OSError: libgomp.so.1: cannot open shared object file" —
+# this breaks the CI smoke test (import app.main). Install it explicitly.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends libgomp1 \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
+
 COPY ml-service/requirements.txt .
 RUN pip install -r requirements.txt
 
