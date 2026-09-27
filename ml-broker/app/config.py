@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 from dataclasses import dataclass, field
+from typing import Any
 
 _CATEGORIES = (
     "sensor-failure",
@@ -20,12 +21,65 @@ def _env_int(name: str, default: int) -> int:
         return default
 
 
+def dsn_to_kwargs(dsn: str) -> dict[str, Any]:
+    """Normalize a DB_DSN into asyncpg.create_pool keyword arguments.
+
+    asyncpg >= 0.31 dropped keyword-format DSNs ("host=... port=...") and
+    only accepts a postgresql:// URI, while docker-compose / .env files
+    historically use the keyword format. Convert both shapes to kwargs so
+    create_pool never has to parse a DSN string at all.
+
+    Precedence: explicit keyword params win over the URI components.
+    """
+    from urllib.parse import unquote, urlparse
+
+    parts: dict[str, str] = {}
+    rest = dsn
+    if "://" in dsn:
+        parsed = urlparse(dsn)
+        rest = parsed.query
+        if parsed.scheme not in ("postgres", "postgresql"):
+            raise ValueError(
+                f"unsupported DB_DSN scheme: {parsed.scheme!r} "
+                "(expected postgresql:// or postgres://)"
+            )
+        if parsed.username:
+            parts["user"] = unquote(parsed.username)
+        if parsed.password is not None:
+            parts["password"] = unquote(parsed.password)
+        if parsed.hostname:
+            parts["host"] = parsed.hostname
+        if parsed.port:
+            parts["port"] = str(parsed.port)
+        if parsed.path and parsed.path != "/":
+            parts["database"] = parsed.path.lstrip("/")
+    # Keyword pairs may be space- or ampersand-separated (asyncpg accepts both);
+    # a URI query string is already ampersand-separated.
+    for chunk in rest.replace(" ", "&").split("&"):
+        chunk = chunk.strip()
+        if not chunk:
+            continue
+        key, _, value = chunk.partition("=")
+        if key:
+            parts[key] = value
+    # asyncpg's DSN *string* accepted libpq's ``dbname=`` alias, but its
+    # connect() kwarg is ``database`` — normalize so either source works.
+    if "dbname" in parts:
+        parts["database"] = parts.pop("dbname")
+    if "password" in parts and parts["password"] == "":
+        parts.pop("password")
+    kwargs: dict[str, Any] = dict(parts)
+    if "port" in kwargs:
+        kwargs["port"] = int(kwargs["port"])
+    return kwargs
+
+
 @dataclass(frozen=True)
 class Config:
     db_dsn: str = field(
         default_factory=lambda: os.environ.get(
             "DB_DSN",
-            "host=127.0.0.1 port=5432 dbname=app_db user=app_service password=app_dev",
+            "postgresql://app_service:app_***@127.0.0.1:5432/app_db",
         )
     )
     ml_base_url: str = field(

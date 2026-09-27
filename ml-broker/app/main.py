@@ -18,7 +18,7 @@ from datetime import datetime, timezone
 
 import httpx
 
-from .config import Config
+from .config import Config, dsn_to_kwargs
 from .db import Db
 from .log import configure, get_logger
 from .notifier import NotifierWorker
@@ -34,9 +34,10 @@ async def main() -> None:
     cfg = Config()
     configure(cfg.log_level)
     wake = asyncio.Event()
+    conn = dsn_to_kwargs(cfg.db_dsn)
     log.info(
         "ml-broker starting",
-        db=cfg.db_dsn.replace("password=***", ""),
+        db=f"host={conn.get('host')}:{conn.get('port')} db={conn.get('database')} user={conn.get('user')}",
         ml=cfg.ml_base_url,
         health=f"{cfg.health_host}:{cfg.health_port}",
         level=cfg.log_level,

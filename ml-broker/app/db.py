@@ -8,7 +8,7 @@ from typing import Any
 
 import asyncpg
 
-from .config import Config
+from .config import Config, dsn_to_kwargs
 from .forecast_flow import (
     ML_BROKER_UUID,
     build_features,
@@ -63,7 +63,7 @@ class Db:
 
     @staticmethod
     async def connect(dsn: str) -> asyncpg.Pool:
-        pool = await asyncpg.create_pool(dsn, min_size=1, max_size=5)
+        pool = await asyncpg.create_pool(min_size=1, max_size=5, **dsn_to_kwargs(dsn))  # type: ignore[arg-type]
         log.debug("db pool ready")
         return pool
 
