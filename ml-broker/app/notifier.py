@@ -1,4 +1,4 @@
-"""NotifierWorker — dedicated LISTEN connection, pokes the queue worker.
+"""NotifierWorker — dedicated LISTEN connection for forecast journals.
 
 NOTIFY is fire-and-forget in Postgres: if nobody is listening when the
 trigger fires, the event is lost. This worker keeps the listener alive and
@@ -62,10 +62,10 @@ class NotifierWorker:
             try:
                 async with self._pool.acquire() as conn:
                     self._conn = conn
-                    await conn.add_listener(self._cfg.listen_channel, self._on_notify)
+                    await conn.add_listener(self._cfg.forecast_listen_channel, self._on_notify)
                     self._connected.set()
                     self._reconnect_count += 1
-                    log.info("LISTEN established", channel=self._cfg.listen_channel)
+                    log.info("LISTEN established", channel=self._cfg.forecast_listen_channel)
                     # Wait until the connection dies or we're told to stop.
                     stop = asyncio.create_task(self._wait_stop())
                     try:
@@ -73,7 +73,7 @@ class NotifierWorker:
                             await asyncio.sleep(0.2)
                     finally:
                         stop.cancel()
-                    await conn.remove_listener(self._cfg.listen_channel, self._on_notify)
+                    await conn.remove_listener(self._cfg.forecast_listen_channel, self._on_notify)
             except (asyncpg.PostgresError, OSError) as exc:
                 self._connected.clear()
                 log.warning("listener connection lost", error=str(exc))

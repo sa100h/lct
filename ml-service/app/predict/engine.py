@@ -61,7 +61,7 @@ class PredictEngine:
         self,
         category: str,
         subject_id: str,
-        features: dict[str, float] | None,
+        features: dict[str, float | str] | None,
         as_of: datetime,
     ) -> list[float]:
         """Assemble the model vector for one subject.
@@ -81,7 +81,12 @@ class PredictEngine:
         vector: list[float] = []
         for name in feature_names:
             if name in features and features[name] is not None:
-                value = float(features[name])  # client overrides everything
+                try:
+                    value = float(features[name])  # client overrides everything
+                except (TypeError, ValueError) as exc:
+                    raise ValueError(
+                        f"Feature '{name}' for subject '{subject_id}' must be numeric; got {features[name]!r}"
+                    ) from exc
             elif name in LAG_SET:
                 value = lag_values.get(name, float("nan"))
             else:
@@ -93,7 +98,7 @@ class PredictEngine:
         self,
         category: str,
         subject_id: str,
-        features: dict[str, float] | None,
+        features: dict[str, float | str] | None,
         horizon_hours: int,
         as_of: datetime | None = None,
     ) -> Prediction:
@@ -129,10 +134,29 @@ class PredictEngine:
             feature_importance=named,
         )
 
+    def predict_all_batch(
+        self,
+        subject_ids: list[str],
+        features: dict[str, dict[str, float | str]] | None,
+        horizon_hours: int,
+        as_of: datetime | None = None,
+    ) -> list[AllCategoriesResponse]:
+        """predict_all() for every channel in a batch.
+
+        ``features`` is per-channel (``subject_id -> feature map``); channels
+        without an entry get None. One as_of for the whole run.
+        """
+        as_of = as_of or datetime.now(timezone.utc)
+        features = features or {}
+        return [
+            self.predict_all(subject, features.get(subject), horizon_hours, as_of=as_of)
+            for subject in subject_ids
+        ]
+
     def predict_all(
         self,
         subject_id: str,
-        features: dict[str, float] | None,
+        features: dict[str, float | str] | None,
         horizon_hours: int,
         as_of: datetime | None = None,
     ) -> AllCategoriesResponse:

@@ -1,10 +1,4 @@
-"""Postgres access layer for the ml-broker.
-
-The durable queue (``ml_predict_queue``) is the source of truth; this module
-only ever moves rows through pending -> running -> done|failed and persists
-results into ``predictions``.
-"""
-
+"""Database access for the journal-driven forecast broker."""
 from __future__ import annotations
 
 import json
@@ -15,13 +9,18 @@ from typing import Any
 import asyncpg
 
 from .config import Config
+from .forecast_flow import (
+    ML_BROKER_UUID,
+    build_features,
+    build_result_description,
+    categories_for_sensor_type,
+)
 from .log import get_logger
 
 log = get_logger(__name__)
 
 
-def _as_features(value: Any) -> dict[str, float]:
-    """Normalize a jsonb features column (dict, JSON string, or None) to a float dict."""
+def _as_features(value: Any) -> dict[str, Any]:
     if value is None:
         return {}
     if isinstance(value, str):
@@ -31,13 +30,16 @@ def _as_features(value: Any) -> dict[str, float]:
             return {}
     if not isinstance(value, dict):
         return {}
-    out: dict[str, float] = {}
-    for key, val in value.items():
+    return {str(key): val for key, val in value.items() if val is not None}
+
+
+def _json(value: Any) -> Any:
+    if isinstance(value, str):
         try:
-            out[str(key)] = float(val)
+            return json.loads(value)
         except (ValueError, TypeError):
-            continue
-    return out
+            return value
+    return value
 
 
 @dataclass
@@ -48,17 +50,10 @@ class QueueRow:
     as_of: datetime
     priority: int
     attempts: int
-    features: dict[str, float]
-
-
-@dataclass
-class ScheduleRow:
-    id: str
-    kind: str
-    name: str
-    cron_expr: str
-    args: dict[str, Any]
-    enabled: bool
+    features: dict[str, Any]
+    forecast_journal_id: str | None = None
+    forecast_name: str | None = None
+    dispatcher_object_id: int | None = None
 
 
 class Db:
@@ -74,215 +69,219 @@ class Db:
 
     async def close(self) -> None:
         await self._pool.close()
-        log.debug("db pool closed")
-
-    # -- startup -----------------------------------------------------------------
 
     async def requeue_orphans(self) -> int:
-        """Re-pend rows a crashed broker left mid-claim. Returns count recovered."""
         async with self._pool.acquire() as conn:
-            res = await conn.execute(
-                """
-                UPDATE ml_predict_queue
-                   SET status = 'pending', claimed_at = NULL
-                 WHERE status = 'running'
-                   AND claimed_at < now() - make_interval(secs => $1)
-                """,
+            result = await conn.execute(
+                """UPDATE ml_predict_queue SET status='pending', claimed_at=NULL
+                   WHERE status='running' AND claimed_at < now() - make_interval(secs => $1)""",
                 self._cfg.orphan_running_after_seconds,
             )
-        recovered = int(res.rsplit(" ", 1)[-1]) if res else 0
-        log.debug("orphan scan", requeued=recovered)
-        return recovered
+        return int(result.rsplit(" ", 1)[-1]) if result else 0
 
-    # -- queue -------------------------------------------------------------------
+    async def claim_open_journal(self) -> dict[str, Any] | None:
+        async with self._pool.acquire() as conn:
+            async with conn.transaction():
+                row = await conn.fetchrow(
+                    """UPDATE forecast_journal
+                       SET status='running', start_composition_time=COALESCE(start_composition_time, now())
+                     WHERE id = (
+                       SELECT id FROM forecast_journal
+                        WHERE status='pending' AND NOT is_cancelled
+                        ORDER BY creation_time, id
+                        LIMIT 1 FOR UPDATE SKIP LOCKED
+                     )
+                     RETURNING *"""
+                )
+        return dict(row) if row else None
+
+    async def fan_out_forecast(self, journal: dict[str, Any]) -> int:
+        journal_id = str(journal["id"])
+        channels = _json(journal.get("forecast_channels")) or {}
+        if not isinstance(channels, dict):
+            raise ValueError("forecast_channels must be a JSON object")
+        creation_time = journal["creation_time"]
+        if creation_time.tzinfo is None:
+            creation_time = creation_time.replace(tzinfo=timezone.utc)
+        creator = journal.get("user_created_id") or ML_BROKER_UUID
+        forecast_name = f"{creation_time.strftime('%Y%m%dT%H%M%S')}_{creator}"
+        keys = [str(k) for k in channels]
+        async with self._pool.acquire() as conn:
+            rows = await conn.fetch(
+                """SELECT c.id, c.sensor_type_id, c.dispatcher_object_id
+                     FROM sensor_channels c WHERE c.id::text = ANY($1::text[])""",
+                keys,
+            ) if keys else []
+            by_id = {str(r["id"]): r for r in rows}
+            values: list[tuple[Any, ...]] = []
+            for key, raw in channels.items():
+                channel = by_id.get(str(key))
+                if channel is None:
+                    log.warning("forecast channel missing", journal_id=journal_id, channel_id=str(key))
+                    continue
+                for category in categories_for_sensor_type(channel["sensor_type_id"]):
+                    values.append((
+                        journal_id,
+                        str(key),
+                        category,
+                        creation_time,
+                        1,
+                        forecast_name,
+                        json.dumps(build_features(raw), ensure_ascii=False),
+                        channel["dispatcher_object_id"],
+                    ))
+            if values:
+                await conn.executemany(
+                    """INSERT INTO ml_predict_queue
+                       (forecast_journal_id, subject_id, category, as_of, priority,
+                        forecast_name, features, dispatcher_object_id)
+                       VALUES ($1,$2,$3,$4,$5,$6,$7::jsonb,$8)
+                       ON CONFLICT (forecast_journal_id, subject_id, category, as_of) DO NOTHING""",
+                    values,
+                )
+        return len(values)
 
     async def claim_batch(self, limit: int) -> list[QueueRow]:
-        """Atomically claim up to ``limit`` oldest pending rows (oldest first)."""
         async with self._pool.acquire() as conn:
             async with conn.transaction():
                 rows = await conn.fetch(
-                    """
-                    SELECT q.id, q.category, q.subject_id, q.as_of, q.priority, q.attempts, f.features
-                      FROM ml_predict_queue q
-                     LEFT JOIN LATERAL (
-                          SELECT s.features
-                            FROM sensor_features s
-                           WHERE s.channel_id = q.subject_id
-                             AND s.as_of = q.as_of
-                           LIMIT 1
-                        ) f ON TRUE
-                     WHERE q.status = 'pending'
-                       AND (q.retry_after IS NULL OR q.retry_after <= now())
-                     ORDER BY q.priority DESC, q.id ASC
-                     LIMIT $1
-                     FOR UPDATE OF q SKIP LOCKED
-                    """,
+                    """SELECT id, category, subject_id, as_of, priority, attempts,
+                              forecast_journal_id, forecast_name, features, dispatcher_object_id
+                         FROM ml_predict_queue
+                        WHERE status='pending' AND (retry_after IS NULL OR retry_after <= now())
+                        ORDER BY priority DESC, id LIMIT $1 FOR UPDATE SKIP LOCKED""",
                     limit,
                 )
                 if rows:
-                    ids = [r["id"] for r in rows]
                     await conn.execute(
-                        "UPDATE ml_predict_queue SET status = 'running', claimed_at = now() WHERE id = ANY($1)",
-                        ids,
+                        "UPDATE ml_predict_queue SET status='running', claimed_at=now() WHERE id=ANY($1::bigint[])",
+                        [r["id"] for r in rows],
                     )
         return [
             QueueRow(
-                id=r["id"],
-                category=r["category"],
-                subject_id=r["subject_id"],
-                as_of=r["as_of"],
-                priority=r["priority"],
-                attempts=r["attempts"],
+                id=r["id"], category=r["category"], subject_id=r["subject_id"],
+                as_of=r["as_of"], priority=r["priority"], attempts=r["attempts"],
                 features=_as_features(r["features"]),
+                forecast_journal_id=str(r["forecast_journal_id"]) if r["forecast_journal_id"] else None,
+                forecast_name=r["forecast_name"], dispatcher_object_id=r["dispatcher_object_id"],
             )
             for r in rows
         ]
 
+    async def store_result(self, row_id: int, result: dict[str, Any]) -> None:
+        async with self._pool.acquire() as conn:
+            await conn.execute(
+                "UPDATE ml_predict_queue SET result=$2::jsonb WHERE id=$1",
+                row_id, json.dumps(result, default=str),
+            )
+
     async def mark_done(self, row_id: int) -> None:
         async with self._pool.acquire() as conn:
             await conn.execute(
-                "UPDATE ml_predict_queue SET status = 'done', finished_at = now() WHERE id = $1",
+                "UPDATE ml_predict_queue SET status='done', finished_at=now() WHERE id=$1 AND status='running'",
                 row_id,
             )
 
     async def mark_retry(self, row_id: int, attempts: int, error: str, backoff_seconds: float) -> None:
         async with self._pool.acquire() as conn:
             await conn.execute(
-                """
-                UPDATE ml_predict_queue
-                   SET status = 'pending',
-                       attempts = $2,
-                       error = $3,
-                       retry_after = now() + make_interval(secs => $4),
-                       claimed_at = NULL
-                 WHERE id = $1
-                """,
-                row_id,
-                attempts,
-                error,
-                backoff_seconds,
+                """UPDATE ml_predict_queue SET status='pending', attempts=$2, error=$3,
+                   retry_after=now()+make_interval(secs=>$4), claimed_at=NULL WHERE id=$1 AND status='running'""",
+                row_id, attempts, error, backoff_seconds,
             )
 
     async def mark_failed(self, row_id: int, attempts: int, error: str) -> None:
         async with self._pool.acquire() as conn:
             await conn.execute(
-                """
-                UPDATE ml_predict_queue
-                   SET status = 'failed', attempts = $2, error = $3, finished_at = now(), claimed_at = NULL
-                 WHERE id = $1
-                """,
-                row_id,
-                attempts,
-                error,
+                """UPDATE ml_predict_queue SET status='failed', attempts=$2, error=$3,
+                   finished_at=now(), claimed_at=NULL WHERE id=$1 AND status='running'""",
+                row_id, attempts, error,
             )
 
-    # -- results ------------------------------------------------------------------
+    async def cancel_open_journals(self) -> int:
+        async with self._pool.acquire() as conn:
+            result = await conn.execute(
+                """UPDATE forecast_journal SET status='cancelled', end_composition_time=now()
+                   WHERE is_cancelled AND status IN ('pending','running')"""
+            )
+            await conn.execute(
+                """UPDATE ml_predict_queue SET status='cancelled', error='cancelled',
+                   finished_at=now(), claimed_at=NULL
+                   WHERE forecast_journal_id IN (SELECT id FROM forecast_journal WHERE is_cancelled)
+                     AND status IN ('pending','running')"""
+            )
+        return int(result.rsplit(" ", 1)[-1]) if result else 0
 
-    async def upsert_prediction(
-        self,
-        *,
-        category: str,
-        subject_id: str,
-        risk_score: float,
-        predicted_label: bool,
-        horizon_hours: int,
-        model_version: str | None,
-        predicted_at: datetime,
-        feature_importance: dict[str, float] | None,
-    ) -> None:
+    async def fail_journal(self, journal_id: str, error: str) -> None:
         async with self._pool.acquire() as conn:
             await conn.execute(
-                """
-                INSERT INTO predictions
-                    (category, subject_id, risk_score, predicted_label, horizon_hours,
-                     model_version, predicted_at, feature_importance)
-                VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb)
-                ON CONFLICT (category, subject_id, predicted_at)
-                DO UPDATE SET
-                    risk_score = EXCLUDED.risk_score,
-                    predicted_label = EXCLUDED.predicted_label,
-                    horizon_hours = EXCLUDED.horizon_hours,
-                    model_version = EXCLUDED.model_version,
-                    feature_importance = EXCLUDED.feature_importance
-                """,
-                category,
-                subject_id,
-                round(float(risk_score), 4),
-                predicted_label,
-                horizon_hours,
-                model_version,
-                predicted_at.astimezone(timezone.utc) if predicted_at.tzinfo else predicted_at.replace(tzinfo=timezone.utc),
-                json.dumps(feature_importance or {}),
+                "UPDATE forecast_journal SET status='error', end_composition_time=now() WHERE id=$1",
+                journal_id,
             )
-
-    async def reenqueue(self, row_id: int, attempts: int, error: str, backoff_seconds: float) -> None:
-        """Alias kept for readability at call sites (== mark_retry)."""
-        await self.mark_retry(row_id, attempts, error, backoff_seconds)
-
-    # -- scheduler table -----------------------------------------------------------
-
-    async def distinct_channels(self) -> list[str]:
-        async with self._pool.acquire() as conn:
-            rows = await conn.fetch("SELECT DISTINCT channel_id FROM sensor_features")
-        return [r["channel_id"] for r in rows]
-
-    async def enqueue_subjects(self, subjects: list[str], categories: list[str]) -> int:
-        """Enqueue (subject, category) pairs at each subject's latest as_of. Dedup-safe."""
-        async with self._pool.acquire() as conn:
-            async with conn.transaction():
-                for subject in subjects:
-                    for cat in categories:
-                        await conn.execute(
-                            """
-                            INSERT INTO ml_predict_queue (category, subject_id, as_of)
-                            VALUES ($1, $2, (SELECT max(as_of) FROM sensor_features WHERE channel_id = $2))
-                            ON CONFLICT (category, subject_id, as_of) DO NOTHING
-                            """,
-                            cat,
-                            subject,
-                        )
-        return len(subjects) * len(categories)
-
-    async def load_schedule(self) -> list[ScheduleRow]:
-        async with self._pool.acquire() as conn:
-            rows = await conn.fetch("SELECT * FROM ml_schedule ORDER BY kind, name")
-        log.debug("schedule loaded", jobs=len(rows))
-        return [
-            ScheduleRow(
-                id=str(r["id"]),
-                kind=r["kind"],
-                name=r["name"],
-                cron_expr=r["cron_expr"],
-                args=json.loads(r["args"]) if isinstance(r["args"], (str, bytes)) else dict(r["args"]),
-                enabled=r["enabled"],
-            )
-            for r in rows
-        ]
-
-    async def touch_schedule(self, schedule_id: str, last_run_at: datetime, next_run_at: datetime | None) -> None:
-        async with self._pool.acquire() as conn:
             await conn.execute(
-                "UPDATE ml_schedule SET last_run_at = $2, next_run_at = $3 WHERE id = $1",
-                schedule_id,
-                last_run_at,
-                next_run_at,
+                """UPDATE ml_predict_queue SET status='failed', error=$2, finished_at=now(), claimed_at=NULL
+                   WHERE forecast_journal_id=$1 AND status IN ('pending','running')""",
+                journal_id, error,
             )
 
-    # -- retrain log ---------------------------------------------------------------
-
-    async def log_retrain_start(self, category: str | None) -> str:
+    async def finalize_journal(self, journal_id: str) -> None:
         async with self._pool.acquire() as conn:
-            run_id = await conn.fetchval(
-                "INSERT INTO ml_retrain_runs (category, status) VALUES ($1, 'running') RETURNING id",
-                category,
+            journal = await conn.fetchrow("SELECT * FROM forecast_journal WHERE id=$1", journal_id)
+            if not journal:
+                return
+            if journal["is_cancelled"]:
+                await conn.execute(
+                    "UPDATE forecast_journal SET status='cancelled', end_composition_time=now() WHERE id=$1",
+                    journal_id,
+                )
+                return
+            counts = await conn.fetchrow(
+                """SELECT count(*) FILTER (WHERE status IN ('pending','running')) AS open,
+                          count(*) FILTER (WHERE status='failed') AS failed
+                     FROM ml_predict_queue WHERE forecast_journal_id=$1""",
+                journal_id,
             )
-        return str(run_id)
-
-    async def log_retrain_finish(self, run_id: str, status: str, metrics: dict[str, Any]) -> None:
-        async with self._pool.acquire() as conn:
+            if counts["open"] or counts["failed"]:
+                if counts["failed"] and not counts["open"]:
+                    await conn.execute(
+                        "UPDATE forecast_journal SET status='error', end_composition_time=now() WHERE id=$1",
+                        journal_id,
+                    )
+                return
+            rows = await conn.fetch(
+                """SELECT dispatcher_object_id, subject_id, category, result
+                     FROM ml_predict_queue WHERE forecast_journal_id=$1 AND status='done'
+                     ORDER BY dispatcher_object_id, subject_id, category""",
+                journal_id,
+            )
+            grouped: dict[int, list[dict[str, Any]]] = {}
+            for row in rows:
+                result = _json(row["result"])
+                if isinstance(result, dict) and row["dispatcher_object_id"] is not None:
+                    result["subject_id"] = row["subject_id"]
+                    result["category"] = row["category"]
+                    grouped.setdefault(row["dispatcher_object_id"], []).append(result)
+            creator = journal["user_created_id"] or ML_BROKER_UUID
+            creation = journal["creation_time"]
+            if creation.tzinfo is None:
+                creation = creation.replace(tzinfo=timezone.utc)
+            name = f"{creation.strftime('%Y%m%dT%H%M%S')}_{creator}"
+            for object_id, predictions in grouped.items():
+                await conn.execute(
+                    """INSERT INTO forecast_results
+                       (forecast_journal_id, forecast_name, forecast_description,
+                        dispatcher_object_id, user_dispatcher_id, is_erroneous, is_cancelled)
+                       VALUES ($1,$2,$3::jsonb,$4,$5,false,false)
+                       ON CONFLICT (forecast_journal_id, dispatcher_object_id) DO UPDATE SET
+                         forecast_name=EXCLUDED.forecast_name,
+                         forecast_description=EXCLUDED.forecast_description,
+                         user_dispatcher_id=EXCLUDED.user_dispatcher_id,
+                         is_erroneous=false, is_cancelled=false, created_at=now()""",
+                    journal_id, name,
+                    json.dumps(build_result_description(predictions, creation), ensure_ascii=False),
+                    object_id, ML_BROKER_UUID,
+                )
             await conn.execute(
-                "UPDATE ml_retrain_runs SET status = $2, finished_at = now(), metrics = $3::jsonb WHERE id = $1",
-                run_id,
-                status,
-                json.dumps(metrics, default=str),
+                "UPDATE forecast_journal SET status='done', end_composition_time=now() WHERE id=$1",
+                journal_id,
             )

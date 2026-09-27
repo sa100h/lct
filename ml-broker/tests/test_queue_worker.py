@@ -50,7 +50,7 @@ class FakeDB:
         self.done: list[int] = []
         self.retried: list[tuple[int, int, str, float]] = []
         self.failed: list[tuple[int, int, str]] = []
-        self.prediction_calls: list[dict] = []
+        self.result_calls: list[tuple[int, dict]] = []
 
     async def claim_batch(self, size: int):
         self.claims += 1
@@ -68,8 +68,8 @@ class FakeDB:
     async def mark_failed(self, row_id: int, attempts: int, error: str) -> None:
         self.failed.append((row_id, attempts, error))
 
-    async def upsert_prediction(self, **kwargs) -> None:
-        self.prediction_calls.append(kwargs)
+    async def store_result(self, row_id: int, result: dict) -> None:
+        self.result_calls.append((row_id, result))
 
     async def close(self) -> None:
         pass
@@ -133,10 +133,8 @@ def test_success_marks_done_and_persists_prediction(cfg):
 
     assert db.done == [1]
     assert db.retried == [] and db.failed == []
-    pred = db.prediction_calls[0]
-    assert pred["subject_id"] == "ch-7"
-    assert pred["risk_score"] == 0.5
-    assert pred["horizon_hours"] == 24
+    assert db.result_calls[0][0] == 1
+    assert db.result_calls[0][1]["risk_score"] == 0.5
     assert client._calls[0]["json"]["horizon_hours"] == 24
     assert client._calls[0]["json"]["current_features"] == {"sensor_temp": 71.2, "humidity": 40.0}
 
@@ -218,7 +216,7 @@ def test_drain_once_empty_queue_is_noop(cfg):
 @pytest.mark.parametrize(
     "value,expected",
     [
-        ({"a": 1.0, "b": None, "c": "3", "d": "bad"}, {"a": 1.0, "c": 3.0}),
+        ({"a": 1.0, "b": None, "c": "3", "d": "bad"}, {"a": 1.0, "c": "3", "d": "bad"}),
         ({}, {}),
         (None, {}),
         ('{"x": 2}', {"x": 2.0}),

@@ -27,9 +27,9 @@ class Category(str, Enum):
 class PredictionRequest(BaseModel):
     category: Category
     subject_id: str = Field(..., description="Identifier of the forecast subject (sensor id, cell, shaft, hatch, ...).")
-    current_features: dict[str, float] = Field(
+    current_features: dict[str, float | str] = Field(
         default_factory=dict,
-        description="Latest feature vector for the subject. Keys are category feature names.",
+        description="Latest feature vector; sensor readings may be numeric or textual.",
     )
     horizon_hours: int = Field(PREDICTION_HORIZON_HOURS, ge=1, le=168)
 
@@ -46,11 +46,38 @@ class Prediction(BaseModel):
     feature_importance: dict[str, float] = Field(default_factory=dict)
 
 
+class BatchPredictionRequest(BaseModel):
+    """Score many channels across all four categories in one call.
+
+    Used by ml-broker for forecast_journal batches (thousands of channels):
+    one HTTP round-trip instead of thousands of /predict_all calls.
+    `current_features` is PER-CHANNEL: ``{"<subject_id>": {"value": 0.42}}`` —
+    keys that do not match a batch member are ignored. The legacy
+    global-dict format is NOT supported (ml-broker is the only caller).
+    """
+
+    subject_ids: list[str] = Field(..., min_length=1, description="Channels to score (ml-service channel ids).")
+    current_features: dict[str, dict[str, float | str]] = Field(
+        default_factory=dict,
+        description="Per-channel feature overrides: subject_id -> feature map.",
+    )
+    horizon_hours: int = Field(PREDICTION_HORIZON_HOURS, ge=1, le=168)
+    as_of: datetime | None = Field(
+        None,
+        description="One as_of for the whole batch (forecast_journal.creation_time).",
+    )
+
+
+class BatchPredictionResponse(BaseModel):
+    horizon_hours: int
+    predictions: list[AllCategoriesResponse]
+
+
 class AllCategoriesRequest(BaseModel):
     subject_id: str = Field(..., description="Sensor/channel id to score across all categories.")
-    current_features: dict[str, float] = Field(
+    current_features: dict[str, float | str] = Field(
         default_factory=dict,
-        description="Optional client-side feature overrides (same names as /predict).",
+        description="Optional client-side feature overrides; sensor readings may be textual.",
     )
     horizon_hours: int = Field(PREDICTION_HORIZON_HOURS, ge=1, le=168)
 

@@ -2,9 +2,8 @@
 
 One asyncio process:
   - Db pool + orphan recovery
-  - NotifierWorker (LISTEN ml_predict -> wake)
-  - QueueWorker (drain queue -> /predict -> predictions)
-  - Scheduler (ml_schedule: predict-all / retrain)
+  - NotifierWorker (LISTEN lct_ml_forecast -> wake)
+  - QueueWorker (journal -> queue -> /predict -> forecast_results)
   - tiny HTTP server with /healthz on HEALTH_PORT
 
 Graceful shutdown on SIGINT/SIGTERM.
@@ -24,7 +23,7 @@ from .db import Db
 from .log import configure, get_logger
 from .notifier import NotifierWorker
 from .queue_worker import QueueWorker
-from .scheduler import Scheduler
+
 
 log = get_logger(__name__)
 
@@ -56,7 +55,7 @@ async def main() -> None:
     client = httpx.AsyncClient(timeout=cfg.http_timeout_seconds)
     notifier = NotifierWorker(pool, cfg, wake)
     worker = QueueWorker(db, client, cfg, wake)
-    sched = Scheduler(db, client, cfg, wake)
+
 
     health = HealthServer(cfg.health_host, cfg.health_port, worker, notifier)
     try:
@@ -69,7 +68,7 @@ async def main() -> None:
     async with client:
         await notifier.start()
         await worker.start()
-        await sched.start()
+
         STATE["status"] = "running"
         log.info("ml-broker running")
 
@@ -82,7 +81,7 @@ async def main() -> None:
 
     log.info("shutting down")
     await worker.stop()
-    await sched.stop()
+
     await notifier.stop()
     await health.stop()
     await db.close()

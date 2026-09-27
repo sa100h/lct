@@ -20,6 +20,8 @@ from app.predict.lag_store import get_store
 from app.schemas import (
     AllCategoriesRequest,
     AllCategoriesResponse,
+    BatchPredictionRequest,
+    BatchPredictionResponse,
     Category,
     Prediction,
     PredictionRequest,
@@ -92,7 +94,7 @@ def predict(req: PredictionRequest) -> Prediction:
     engine: PredictEngine = app.state.engine
     try:
         return engine.predict(req.category.value, req.subject_id, req.current_features, req.horizon_hours)
-    except KeyError as exc:
+    except (KeyError, ValueError) as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
 
@@ -102,8 +104,21 @@ def predict_all(req: AllCategoriesRequest) -> AllCategoriesResponse:
     engine: PredictEngine = app.state.engine
     try:
         return engine.predict_all(req.subject_id, req.current_features, req.horizon_hours)
-    except KeyError as exc:
+    except (KeyError, ValueError) as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@app.post("/predict_all_batch", response_model=BatchPredictionResponse)
+def predict_all_batch(req: BatchPredictionRequest) -> BatchPredictionResponse:
+    """All four categories for a batch of channels (forecast_journal workloads)."""
+    engine: PredictEngine = app.state.engine
+    try:
+        predictions = engine.predict_all_batch(
+            req.subject_ids, req.current_features, req.horizon_hours, as_of=req.as_of
+        )
+    except (KeyError, ValueError) as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    return BatchPredictionResponse(horizon_hours=req.horizon_hours, predictions=predictions)
 
 
 @app.post("/retrain")

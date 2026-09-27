@@ -52,5 +52,19 @@ class Config:
         default_factory=lambda: float(os.environ.get("ORPHAN_RUNNING_AFTER_SECONDS", "600"))
     )
     log_level: str = field(default_factory=lambda: os.environ.get("LOG_LEVEL", "INFO"))
+    # app-service callback (user login:password for Basic auth).
+    app_service_callback_url: str = field(
+        default_factory=lambda: os.environ.get(
+            "APP_SERVICE_CALLBACK_URL", "http://app-service:8081/api/v1/forecasts/notify"
+        )
+    )
+    app_service_login: str = field(default_factory=lambda: os.environ.get("APP_SERVICE_LOGIN", "lct"))
+    app_service_password: str = field(default_factory=lambda: os.environ.get("APP_SERVICE_PASSWORD", ""))
     categories: tuple[str, ...] = _CATEGORIES
-    listen_channel: str = field(default_factory=lambda: os.environ.get("LISTEN_CHANNEL", "ml_predict"))
+    forecast_listen_channel: str = field(
+        default_factory=lambda: os.environ.get("FORECAST_LISTEN_CHANNEL", "lct_ml_forecast")
+    )
+    forecast_poll_seconds: float = field(
+        default_factory=lambda: float(os.environ.get("FORECAST_POLL_SECONDS", "2"))
+    )
+    forecast_batch_chunk: int = field(default_factory=lambda: _env_int("FORECAST_BATCH_CHUNK", 300))
