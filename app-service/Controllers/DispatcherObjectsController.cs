@@ -26,6 +26,8 @@ public sealed class DispatcherObjectsController(
             item.Longitude,
             item.Latitude,
             item.Statuses,
-            item.ChannelCount)));
+            item.ChannelCount,
+            item.OwnStatuses,
+            item.OwnChannelCount)));
     }
 }

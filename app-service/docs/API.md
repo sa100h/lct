@@ -188,6 +188,8 @@ curl http://localhost:8080/health
 расшифрованным типом, координатами WGS 84 и агрегированными статусами каналов.
 Для каждого объекта `statuses` и `channelCount` учитывают его собственные
 каналы и каналы всех вложенных объектов на любом уровне иерархии.
+`ownStatuses` и `ownChannelCount` считают только каналы с
+`dispatcher_object_id` этого объекта, без потомков.
 
 **Ответ 200**
 
@@ -202,13 +204,16 @@ curl http://localhost:8080/health
     "longitude": 37.5,
     "latitude": 55.61,
     "statuses": ["Норма"],
-    "channelCount": 42
+    "channelCount": 42,
+    "ownStatuses": ["Норма"],
+    "ownChannelCount": 3
   }
 ]
 ```
 
 Объект без связанных каналов получает пустой массив `statuses` и
-`channelCount: 0`.
+`channelCount: 0`. Объект без собственных каналов получает пустой массив
+`ownStatuses` и `ownChannelCount: 0`.
 
 ---
 

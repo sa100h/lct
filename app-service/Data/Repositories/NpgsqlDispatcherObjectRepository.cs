@@ -37,6 +37,20 @@ public sealed class NpgsqlDispatcherObjectRepository(string connectionString) : 
                 LEFT JOIN sensor_statuses status
                     ON status.id = channel.sensor_status_id
                 GROUP BY tree.ancestor_id
+            ),
+            own_channels AS (
+                SELECT
+                    channel.dispatcher_object_id AS object_id,
+                    COUNT(channel.id)::integer AS own_channel_count,
+                    COALESCE(
+                        ARRAY_AGG(DISTINCT status.name ORDER BY status.name)
+                            FILTER (WHERE status.name IS NOT NULL),
+                        ARRAY[]::text[]
+                    ) AS own_statuses
+                FROM sensor_channels channel
+                LEFT JOIN sensor_statuses status
+                    ON status.id = channel.sensor_status_id
+                GROUP BY channel.dispatcher_object_id
             )
             SELECT
                 object.id,
@@ -47,10 +61,13 @@ public sealed class NpgsqlDispatcherObjectRepository(string connectionString) : 
                 object.longitude,
                 object.latitude,
                 aggregated.statuses,
-                aggregated.channel_count
+                aggregated.channel_count,
+                COALESCE(own.own_statuses, ARRAY[]::text[]),
+                COALESCE(own.own_channel_count, 0)
             FROM dispatcher_objects object
             JOIN object_types object_type ON object_type.id = object.object_type_id
             JOIN aggregated_statuses aggregated ON aggregated.ancestor_id = object.id
+            LEFT JOIN own_channels own ON own.object_id = object.id
             ORDER BY object.hierarchy_level, object.id
             """, connection);
 
@@ -67,7 +84,9 @@ public sealed class NpgsqlDispatcherObjectRepository(string connectionString) : 
                 reader.GetDouble(5),
                 reader.GetDouble(6),
                 reader.GetFieldValue<string[]>(7),
-                reader.GetInt32(8)));
+                reader.GetInt32(8),
+                reader.GetFieldValue<string[]>(9),
+                reader.GetInt32(10)));
         }
 
         return result;
