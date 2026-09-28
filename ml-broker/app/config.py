@@ -85,7 +85,6 @@ class Config:
     ml_base_url: str = field(
         default_factory=lambda: os.environ.get("ML_BASE_URL", "http://127.0.0.1:8000")
     )
-    queue_batch: int = field(default_factory=lambda: _env_int("QUEUE_BATCH", 10))
     poll_seconds: float = field(
         default_factory=lambda: float(os.environ.get("POLL_SECONDS", "5"))
     )

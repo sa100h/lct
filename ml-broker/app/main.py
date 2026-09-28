@@ -3,7 +3,7 @@
 One asyncio process:
   - Db pool + orphan recovery
   - NotifierWorker (LISTEN lct_ml_forecast -> wake)
-  - QueueWorker (journal -> queue -> /predict -> forecast_results)
+  - QueueWorker (journal -> queue -> /predict_all_batch -> forecast_results)
   - tiny HTTP server with /healthz on HEALTH_PORT
 
 Graceful shutdown on SIGINT/SIGTERM.

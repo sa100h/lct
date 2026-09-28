@@ -349,6 +349,10 @@ erDiagram
 
 Уникальное ограничение `uq_queue_dedup (category, subject_id, as_of)` не допускает дублирующую задачу. Индекс `idx_queue_status_id (status, id)`.
 
+Пополняется брокером при fan-out строк `forecast_journal` (одна строка на пару «канал × категория», колонки `forecast_journal_id`, `forecast_name`, `features`, `dispatcher_object_id` добавлены миграцией `030`; дедуп `uq_forecast_queue_dedup (forecast_journal_id, subject_id, category, as_of)`). Брокер обрабатывает очередь батчево: чанк субъектов одного журнала (размер — `FORECAST_BATCH_CHUNK`, по умолчанию 300) на один вызов ml-service `POST /predict_all_batch`.
+
+Колонка `result` (jsonb, миграция `030`) хранит ответ ml-service: либо полный `Prediction` (risk_score, probability, predicted_label, model_version, …), либо заглушку `{"applicable": false, "category": …, "subject_id": …}` для каналов вне обучающей выборки категории. В `forecast_description` результата такие каналы присутствуют со значением `{"status_code": "unpredictable"}` вместо скорa (см. `forecast_results`).
+
 ### `ml_schedule`
 
 Расписание фоновых задач ML-брокера в пятичастном cron-формате.
