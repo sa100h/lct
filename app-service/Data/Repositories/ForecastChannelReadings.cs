@@ -1,3 +1,4 @@
+using AppService.Models;
 using Npgsql;
 using NpgsqlTypes;
 
@@ -5,6 +6,7 @@ namespace AppService.Data.Repositories;
 
 internal static class ForecastChannelReadings
 {
+    private const string NoConnection = "Нет связи";
     private const string LatestReadingsSql = """
         WITH RECURSIVE selected_objects AS (
             SELECT id FROM dispatcher_objects WHERE id = ANY(@objectIds)
@@ -29,7 +31,7 @@ internal static class ForecastChannelReadings
         ORDER BY channel.id
         """;
 
-    public static async Task<Dictionary<int, string>> ReadLatestAsync(
+    public static async Task<ForecastChannelSnapshot> ReadLatestAsync(
         NpgsqlConnection connection,
         NpgsqlTransaction? transaction,
         IReadOnlyCollection<int>? dispatcherObjectIds,
@@ -45,14 +47,21 @@ internal static class ForecastChannelReadings
         command.Parameters.AddWithValue("to", NpgsqlDbType.TimestampTz, to.UtcDateTime);
 
         var readings = new Dictionary<int, string>();
+        var activeChannelIds = new List<int>();
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
         while (await reader.ReadAsync(cancellationToken))
         {
-            if (!reader.IsDBNull(1))
+            var channelId = reader.GetInt32(0);
+            if (reader.IsDBNull(1))
             {
-                readings.Add(reader.GetInt32(0), reader.GetString(1));
+                readings.Add(channelId, NoConnection);
+            }
+            else
+            {
+                readings.Add(channelId, reader.GetString(1));
+                activeChannelIds.Add(channelId);
             }
         }
-        return readings;
+        return new ForecastChannelSnapshot(readings, activeChannelIds);
     }
 }

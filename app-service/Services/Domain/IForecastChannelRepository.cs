@@ -1,8 +1,10 @@
+using AppService.Models;
+
 namespace AppService.Services.Domain;
 
 public interface IForecastChannelRepository
 {
-    Task<IReadOnlyDictionary<int, string>> GetLatestForObjectsAsync(
+    Task<ForecastChannelSnapshot> GetLatestForObjectsAsync(
         IReadOnlyCollection<int>? dispatcherObjectIds,
         DateTimeOffset from,
         DateTimeOffset to,

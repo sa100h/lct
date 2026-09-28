@@ -214,14 +214,14 @@ erDiagram
 
 ### `forecast_journal`
 
-Одна запись на запуск формирования прогноза. После `019` снимок содержит карту последних текстовых показаний по каналам. Ключи JSON-объекта — ID канала (в виде JSON-ключа-строки), значения — `sensor_value`. Пример: `{"123":"42.1","124":"норма"}`.
+Одна запись на запуск формирования прогноза. Снимок содержит все выбранные каналы. Ключи JSON-объекта — ID канала (в виде JSON-ключа-строки), значения — последнее `sensor_value` за 24 часа или `"Нет связи"` при отсутствии показаний. Пример: `{"123":"42.1","124":"Нет связи"}`.
 
 | Колонка | Тип | NULL | По умолчанию / ограничения | Значение |
 |---|---|---:|---|---|
 | `id` | `uuid` | нет | PK; `gen_random_uuid()` | ID запуска |
 | `description` | `text` | нет | — | Описание запуска |
-| `user_created_id` | `uuid` | да | FK → `users.id` | Автор; NULL для автозапуска |
-| `forecast_channels` | `jsonb` | нет | CHECK `jsonb_typeof(...) = 'object'` | Снимок последних показаний каналов |
+| `user_created_id` | `uuid` | нет | FK → `users.id` | Автор; для автозапуска служебный `auto_forecast` |
+| `forecast_channels` | `jsonb` | нет | CHECK `jsonb_typeof(...) = 'object'` | Снимок показаний всех выбранных каналов или `"Нет связи"` |
 | `creation_time` | `timestamp` | нет | — | Время создания; хранится без часового пояса |
 | `start_composition_time` | `timestamp` | да | — | Начало расчёта |
 | `end_composition_time` | `timestamp` | да | — | Завершение расчёта |
@@ -230,7 +230,7 @@ erDiagram
 | `params` | `json` | да | — | Параметры запуска; структура JSON не ограничена |
 | `status` | `text` | да | — | Статус запуска; набор значений БД не ограничивает |
 
-Проверка `forecast_journal_origin_chk` связывает тип запуска и источник: `manual` требует `user_created_id IS NOT NULL` и `scheduled_hour IS NULL`; `auto` требует `user_created_id IS NULL` и `scheduled_hour IS NOT NULL`. FK автора имеет стандартное поведение удаления/обновления (NO ACTION). Индекс `idx_forecast_journal_creator (user_created_id)`. Частичный уникальный индекс `uq_forecast_journal_auto_hour (scheduled_hour) WHERE run_type = 'auto'` не позволяет записать более одного автоматического журнала на один час.
+Проверка `forecast_journal_origin_chk` связывает тип запуска и источник: `manual` требует `scheduled_hour IS NULL`; `auto` требует `scheduled_hour IS NOT NULL` и UUID служебного пользователя `auto_forecast`. `user_created_id` обязателен для обоих типов. Для существующих автоматических записей миграция `036` проставляет UUID служебного пользователя. FK автора имеет стандартное поведение удаления/обновления (NO ACTION). Индекс `idx_forecast_journal_creator (user_created_id)`. Частичный уникальный индекс `uq_forecast_journal_auto_hour (scheduled_hour) WHERE run_type = 'auto'` не позволяет записать более одного автоматического журнала на один час.
 
 Миграция `019` переименовывает `forecast_objects` и принудительно заменяет содержимое всех старых строк на `{}`: достоверный старый снимок каналов восстановить было нельзя. Это намеренное уничтожение старого JSON-содержимого.
 
@@ -409,7 +409,7 @@ erDiagram
 | `idx_events_log_datetime` | `events_log(event_datetime)` | События по времени |
 | `idx_events_log_alarm` | `events_log(is_alarm)` | Фильтр тревожности |
 | `idx_events_log_channel_time_id` | `events_log(sensor_channel_id, event_datetime DESC, id DESC)` | Последнее событие канала |
-| `idx_forecast_journal_creator` | `forecast_journal(user_created_id)` | Журналы пользователя; NULL для авто |
+| `idx_forecast_journal_creator` | `forecast_journal(user_created_id)` | Журналы пользователя, включая служебного автора авто |
 | `uq_forecast_journal_auto_hour` | `forecast_journal(scheduled_hour)` UNIQUE partial | Только `run_type = 'auto'` |
 | `idx_forecast_results_journal` | `forecast_results(forecast_journal_id)` | Результаты запуска |
 | `idx_forecast_results_object` | `forecast_results(dispatcher_object_id)` | Результаты объекта |

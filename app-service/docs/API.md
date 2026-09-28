@@ -284,7 +284,8 @@ curl -k https://localhost/api/app/dashboard \
 Нужны JWT и permission `module.prediction`. Создаёт запись `manual` в `forecast_journal`.
 Выбранные объекты разворачиваются в каналы, включая каналы дочерних объектов.
 Для каждого канала в `forecast_channels` записывается последнее ненулевое текстовое
-`sensor_value` из `events_log` за 24 часа до запуска. Эндпоинт не вызывает ML-сервис. Значения
+`sensor_value` из `events_log` за 24 часа до запуска либо `"Нет связи"`, если показаний
+не было. Эндпоинт не вызывает ML-сервис. Значения
 `start_composition_time` и `end_composition_time` остаются `NULL`.
 
 **Тело**
@@ -312,10 +313,12 @@ curl -k https://localhost/api/app/dashboard \
 ```
 
 ID создателя берётся из `sub` текущего JWT. В `forecast_channels` сохраняется
-JSONB-объект вида `{"120578":"23.5"}`. Ключ — `sensor_channels.id`, значение —
-текст из `events_log.sensor_value`. При автоматическом запуске `user_created_id`
-равен SQL `NULL`, а `run_type` равен `auto`. `app-service` раз в час создаёт такую
-запись для всех каналов с показаниями за 24 часа; пустой запуск пропускается.
+JSONB-объект вида `{"120578":"23.5","120579":"Нет связи"}`. Ключ —
+`sensor_channels.id`, значение — текст из `events_log.sensor_value` или `"Нет связи"`.
+При автоматическом запуске `user_created_id` равен UUID служебного пользователя
+`auto_forecast`, а `run_type` равен `auto`. `app-service` раз в час создаёт запись
+для всех каналов. Если за 24 часа ни по одному каналу нет показаний, запись не
+создаётся, а ошибка фиксируется в логе.
 В том же проходе каналы без показаний получают статус «Нет связи», остальные — «Норма».
 
 ### `GET /forecasts/authors`
@@ -346,7 +349,7 @@ Query:
 
 `page < 1` или `pageSize < 1`, битый uuid/дата — `400`. Сортировка: `creation_time DESC`, `id DESC`.
 
-Статус: `pending` / `running` / `done` (как на дашборде). `objectCount` — число уникальных объектов, которым принадлежат каналы из `forecast_channels`. Для автоматической записи `authorLogin` равен `Автоматически`.
+Статус: `pending` / `running` / `done` (как на дашборде). `objectCount` — число уникальных объектов, которым принадлежат каналы из `forecast_channels`. Для автоматической записи `authorLogin` равен `auto_forecast`.
 
 **Ответ 200**
 

@@ -1,3 +1,4 @@
+using AppService.Models;
 using AppService.Services.Domain;
 using Npgsql;
 
@@ -5,7 +6,7 @@ namespace AppService.Data.Repositories;
 
 public sealed class NpgsqlForecastChannelRepository(string connectionString) : IForecastChannelRepository
 {
-    public async Task<IReadOnlyDictionary<int, string>> GetLatestForObjectsAsync(
+    public async Task<ForecastChannelSnapshot> GetLatestForObjectsAsync(
         IReadOnlyCollection<int>? dispatcherObjectIds,
         DateTimeOffset from,
         DateTimeOffset to,

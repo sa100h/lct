@@ -5,8 +5,13 @@ using NpgsqlTypes;
 
 namespace AppService.Data.Repositories;
 
-public sealed class NpgsqlAutomaticForecastRepository(string connectionString) : IAutomaticForecastRepository
+public sealed class NpgsqlAutomaticForecastRepository(
+    string connectionString,
+    ILogger<NpgsqlAutomaticForecastRepository> logger) : IAutomaticForecastRepository
 {
+    private static readonly Guid AutomaticForecastUserId =
+        Guid.Parse("40ab0edd-9261-42f2-b6c9-d18f00cf475f");
+
     public async Task<bool> RunHourlyAsync(
         DateTimeOffset scheduledHour,
         DateTimeOffset from,
@@ -39,13 +44,17 @@ public sealed class NpgsqlAutomaticForecastRepository(string connectionString) :
             }
         }
 
-        var readings = await ForecastChannelReadings.ReadLatestAsync(
+        var snapshot = await ForecastChannelReadings.ReadLatestAsync(
             connection, transaction, null, from, to, cancellationToken);
-        await UpdateConnectivityAsync(connection, transaction, readings.Keys.ToArray(), cancellationToken);
+        await UpdateConnectivityAsync(
+            connection, transaction, snapshot.ActiveChannelIds.ToArray(), cancellationToken);
 
-        if (readings.Count == 0)
+        if (snapshot.ActiveChannelIds.Count == 0)
         {
             await transaction.CommitAsync(cancellationToken);
+            logger.LogError(
+                "Hourly forecast for {ScheduledHour} has no sensor readings in the last 24 hours",
+                scheduledHour);
             return false;
         }
 
@@ -54,12 +63,13 @@ public sealed class NpgsqlAutomaticForecastRepository(string connectionString) :
                              (description, user_created_id, forecast_channels, creation_time,
                               run_type, scheduled_hour)
                          VALUES
-                             (@description, NULL, @channels, @createdAt, 'auto', @scheduledHour)
+                             (@description, @userId, @channels, @createdAt, 'auto', @scheduledHour)
                          """, connection, transaction))
         {
             insertCommand.Parameters.AddWithValue("description", "Автоматический прогноз");
+            insertCommand.Parameters.AddWithValue("userId", NpgsqlDbType.Uuid, AutomaticForecastUserId);
             insertCommand.Parameters.AddWithValue(
-                "channels", NpgsqlDbType.Jsonb, JsonSerializer.Serialize(readings));
+                "channels", NpgsqlDbType.Jsonb, JsonSerializer.Serialize(snapshot.Readings));
             insertCommand.Parameters.AddWithValue(
                 "createdAt", NpgsqlDbType.Timestamp,
                 DateTime.SpecifyKind(to.UtcDateTime, DateTimeKind.Unspecified));

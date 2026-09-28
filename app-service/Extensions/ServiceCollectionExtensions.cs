@@ -51,7 +51,10 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<IDashboardFeedRepository>(_ => new NpgsqlDashboardFeedRepository(connectionString));
         services.AddSingleton<IForecastJournalRepository>(_ => new NpgsqlForecastJournalRepository(connectionString));
         services.AddSingleton<IForecastChannelRepository>(_ => new NpgsqlForecastChannelRepository(connectionString));
-        services.AddSingleton<IAutomaticForecastRepository>(_ => new NpgsqlAutomaticForecastRepository(connectionString));
+        services.AddSingleton<IAutomaticForecastRepository>(provider =>
+            new NpgsqlAutomaticForecastRepository(
+                connectionString,
+                provider.GetRequiredService<ILogger<NpgsqlAutomaticForecastRepository>>()));
         services.AddSingleton<ITokenIssuer, JwtTokenIssuer>();
         services.AddScoped<IAuthSessionService, AuthSessionService>();
         services.AddScoped<IDispatcherObjectQueryService, DispatcherObjectQueryService>();

@@ -71,7 +71,11 @@ public sealed class ForecastRunServiceTests
     public async Task RunAsync_RejectsSelectionWithoutRecentReadings()
     {
         var repository = new RecordingForecastJournalRepository();
-        var channels = new RecordingForecastChannelRepository { Readings = new Dictionary<int, string>() };
+        var channels = new RecordingForecastChannelRepository
+        {
+            Snapshot = new ForecastChannelSnapshot(
+                new Dictionary<int, string> { [120578] = "Нет связи" }, []),
+        };
         var service = new ForecastRunService(repository, channels, new FixedTimeProvider(DateTimeOffset.UtcNow));
 
         var exception = await Assert.ThrowsAsync<ArgumentException>(() => service.RunAsync(
@@ -81,6 +85,28 @@ public sealed class ForecastRunServiceTests
             "Нет показаний датчиков за последние 24 часа для выбранных объектов.",
             exception.Message);
         Assert.Null(repository.UserId);
+    }
+
+    [Fact]
+    public async Task RunAsync_StoresOfflineChannelsAlongsideActiveReadings()
+    {
+        var repository = new RecordingForecastJournalRepository();
+        var channels = new RecordingForecastChannelRepository
+        {
+            Snapshot = new ForecastChannelSnapshot(
+                new Dictionary<int, string>
+                {
+                    [120578] = "1",
+                    [120579] = "Нет связи",
+                }, [120578]),
+        };
+        var service = new ForecastRunService(
+            repository, channels, new FixedTimeProvider(DateTimeOffset.UtcNow));
+
+        await service.RunAsync(Guid.NewGuid(), [20], TestContext.Current.CancellationToken);
+
+        Assert.Equal("1", repository.ChannelReadings?[120578]);
+        Assert.Equal("Нет связи", repository.ChannelReadings?[120579]);
     }
 
     private sealed class RecordingForecastJournalRepository : IForecastJournalRepository
@@ -136,15 +162,15 @@ public sealed class ForecastRunServiceTests
 
     private sealed class RecordingForecastChannelRepository : IForecastChannelRepository
     {
-        public IReadOnlyDictionary<int, string> Readings { get; init; } =
-            new Dictionary<int, string> { [120578] = "1" };
+        public ForecastChannelSnapshot Snapshot { get; init; } = new(
+            new Dictionary<int, string> { [120578] = "1" }, [120578]);
 
-        public Task<IReadOnlyDictionary<int, string>> GetLatestForObjectsAsync(
+        public Task<ForecastChannelSnapshot> GetLatestForObjectsAsync(
             IReadOnlyCollection<int>? dispatcherObjectIds,
             DateTimeOffset from,
             DateTimeOffset to,
             CancellationToken cancellationToken = default)
-            => Task.FromResult(Readings);
+            => Task.FromResult(Snapshot);
 
     }
 

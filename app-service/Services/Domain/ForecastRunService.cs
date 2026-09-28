@@ -46,9 +46,9 @@ public sealed class ForecastRunService(
         }
 
         var now = timeProvider.GetUtcNow();
-        var readings = await channels.GetLatestForObjectsAsync(
+        var snapshot = await channels.GetLatestForObjectsAsync(
             normalizedObjectIds, now.AddDays(-1), now, cancellationToken);
-        if (readings.Count == 0)
+        if (snapshot.ActiveChannelIds.Count == 0)
         {
             throw new ArgumentException("Нет показаний датчиков за последние 24 часа для выбранных объектов.");
         }
@@ -56,7 +56,7 @@ public sealed class ForecastRunService(
         return await repository.CreateAsync(
             userId,
             Description,
-            readings,
+            snapshot.Readings,
             normalizedObjectIds,
             now,
             cancellationToken);
