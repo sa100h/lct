@@ -2,5 +2,8 @@ namespace AppService.Models;
 
 public sealed record DashboardSnapshot(
     DashboardObjectSummary Objects,
-    IReadOnlyList<DashboardEventRow> Events,
-    IReadOnlyList<DashboardForecastItem> Forecasts);
+    IReadOnlyList<DashboardDayCount> AlarmsByDay,
+    int RequestsTotal,
+    IReadOnlyList<DashboardStatusCount> RequestsByStatus,
+    IReadOnlyList<DashboardDayCount> RequestsByDay,
+    IReadOnlyList<DashboardStatusCount> ForecastsByStatus);

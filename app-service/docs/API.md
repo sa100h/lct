@@ -222,8 +222,10 @@ curl http://localhost:8080/health
 ### `GET /dashboard`
 
 Нужны JWT и permission `module.dashboard`. Одна сводка для экрана «Дашборд»:
-цифры по объектам, до 20 проблемных, до 20 последних событий, до 10 запусков
-прогноза. Заявки в ответ **не входят** — они в модуле `GET /requests`.
+цифры по объектам и агрегаты за 14 календарных дней UTC (включая сегодня).
+Таблиц событий и прогнозов в ответе нет. Список заявок — в модуле
+`GET /requests`; на дашборде заявки только как counts **по всем** строкам,
+без фильтра роли.
 
 **Ответ 200**
 
@@ -232,34 +234,33 @@ curl http://localhost:8080/health
   "objects": {
     "total": 80,
     "normal": 72,
-    "deviation": 8,
-    "problemObjects": [
-      { "id": 5, "name": "объект Альфа", "statuses": ["Тревога"] }
-    ]
+    "deviation": 8
   },
-  "events": [
-    {
-      "id": 1001,
-      "occurredAt": "2026-09-26T10:15:00Z",
-      "objectId": 5,
-      "objectName": "объект Альфа",
-      "channelName": "Дым",
-      "isAlarm": true,
-      "value": "1"
-    }
+  "alarmsByDay": [{ "date": "2026-09-15", "count": 3 }],
+  "requestsTotal": 12,
+  "requestsByStatus": [
+    { "status": "Новая", "count": 4 },
+    { "status": "В работе", "count": 5 },
+    { "status": "Закрыта", "count": 3 }
   ],
-  "forecasts": [
-    {
-      "id": "2c059017-47c7-480a-b0a1-516be249695d",
-      "createdAt": "2026-09-25T10:30:00Z",
-      "status": "pending"
-    }
+  "requestsByDay": [{ "date": "2026-09-15", "count": 1 }],
+  "forecastsByStatus": [
+    { "status": "pending", "count": 2 },
+    { "status": "running", "count": 0 },
+    { "status": "done", "count": 6 }
   ]
 }
 ```
 
 Объект **в норме**, если `statuses` пустой или все значения равны `Норма`.
-**Отклонение** — есть статус ≠ `Норма`. Пустые ленты — `[]`.
+**Отклонение** — есть статус ≠ `Норма`.
+
+Ряды `alarmsByDay` и `requestsByDay` всегда длины 14; дни без данных —
+`count: 0`. `date` — `yyyy-MM-dd` UTC. Тревоги: `events_log.is_alarm`.
+Заявки по дням: `requests.created_at`. `requestsByStatus` — три имени из
+`request_statuses` (нули допустимы). `requestsTotal` — сумма этих трёх.
+`forecastsByStatus` — итог за те же 14 дней по `forecast_journal.creation_time`,
+не ряд по дням; три ключа `pending` / `running` / `done` (нули допустимы).
 
 Статус прогноза: `pending` (нет start/end composition), `running` (есть start, нет end), `done` (есть end).
 

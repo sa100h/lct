@@ -6,6 +6,19 @@ namespace AppService.Tests;
 
 public sealed class DashboardQueryServiceTests
 {
+    private static readonly DateTimeOffset FrozenUtc = new(2026, 9, 28, 12, 0, 0, TimeSpan.Zero);
+
+    [Fact]
+    public void PadDays_FillsFourteenZeros()
+    {
+        var days = DashboardQueryService.PadDays(new DateOnly(2026, 9, 28), new Dictionary<DateOnly, int>());
+
+        Assert.Equal(14, days.Count);
+        Assert.Equal(new DateOnly(2026, 9, 15), days[0].Date);
+        Assert.Equal(new DateOnly(2026, 9, 28), days[13].Date);
+        Assert.All(days, day => Assert.Equal(0, day.Count));
+    }
+
     [Fact]
     public async Task GetAsync_CountsNormalEmptyOrNormaOnly()
     {
@@ -15,37 +28,40 @@ public sealed class DashboardQueryServiceTests
             Object(2, ["Норма"]),
             Object(3, ["Норма", "Тревога"]),
         ];
-        var service = new DashboardQueryService(
-            new StubDispatcherObjectRepository(objects),
-            new StubDashboardFeedRepository());
+        var service = CreateService(objects, new StubDashboardFeedRepository());
 
         var snapshot = await service.GetAsync(TestContext.Current.CancellationToken);
 
         Assert.Equal(3, snapshot.Objects.Total);
         Assert.Equal(2, snapshot.Objects.Normal);
         Assert.Equal(1, snapshot.Objects.Deviation);
-        var problem = Assert.Single(snapshot.Objects.ProblemObjects);
-        Assert.Equal(3, problem.Id);
-        Assert.Equal(["Норма", "Тревога"], problem.Statuses);
     }
 
     [Fact]
-    public async Task GetAsync_TruncatesProblemObjectsTo20()
+    public async Task GetAsync_PadsAlarmsAndRequestStatusZeros()
     {
-        var objects = Enumerable.Range(1, 21)
-            .Select(id => Object(id, ["Тревога"]))
-            .ToArray();
-        var service = new DashboardQueryService(
-            new StubDispatcherObjectRepository(objects),
-            new StubDashboardFeedRepository());
+        var feeds = new StubDashboardFeedRepository
+        {
+            Alarms = new Dictionary<DateOnly, int> { [new DateOnly(2026, 9, 28)] = 2 },
+            RequestStatuses = [new DashboardStatusCount("В работе", 3)],
+        };
+        var service = CreateService([], feeds);
 
         var snapshot = await service.GetAsync(TestContext.Current.CancellationToken);
 
-        Assert.Equal(21, snapshot.Objects.Total);
-        Assert.Equal(21, snapshot.Objects.Deviation);
-        Assert.Equal(20, snapshot.Objects.ProblemObjects.Count);
-        Assert.Equal(1, snapshot.Objects.ProblemObjects[0].Id);
-        Assert.Equal(20, snapshot.Objects.ProblemObjects[19].Id);
+        Assert.Equal(14, snapshot.AlarmsByDay.Count);
+        Assert.Equal(2, snapshot.AlarmsByDay[13].Count);
+        Assert.All(snapshot.AlarmsByDay.Take(13), day => Assert.Equal(0, day.Count));
+        Assert.Equal(
+            ["Новая", "В работе", "Закрыта"],
+            snapshot.RequestsByStatus.Select(item => item.Status));
+        Assert.Equal([0, 3, 0], snapshot.RequestsByStatus.Select(item => item.Count));
+        Assert.Equal(3, snapshot.RequestsTotal);
+        Assert.Equal(
+            ["pending", "running", "done"],
+            snapshot.ForecastsByStatus.Select(item => item.Status));
+        Assert.All(snapshot.ForecastsByStatus, item => Assert.Equal(0, item.Count));
+        Assert.Equal(14, snapshot.RequestsByDay.Count);
     }
 
     [Fact]
@@ -59,8 +75,18 @@ public sealed class DashboardQueryServiceTests
         Assert.Equal("done", DashboardQueryService.MapForecastStatus(start, end));
     }
 
+    private static DashboardQueryService CreateService(
+        IReadOnlyList<DispatcherObjectInfo> objects,
+        IDashboardFeedRepository feeds)
+        => new(new StubDispatcherObjectRepository(objects), feeds, new FixedTimeProvider(FrozenUtc));
+
     private static DispatcherObjectInfo Object(int id, IReadOnlyList<string> statuses)
         => new(id, null, $"o{id}", 1, "district", 0, 0, statuses, 0, [], 0);
+
+    private sealed class FixedTimeProvider(DateTimeOffset utc) : TimeProvider
+    {
+        public override DateTimeOffset GetUtcNow() => utc;
+    }
 
     private sealed class StubDispatcherObjectRepository(
         IReadOnlyList<DispatcherObjectInfo> result) : IDispatcherObjectRepository
@@ -77,12 +103,31 @@ public sealed class DashboardQueryServiceTests
 
     private sealed class StubDashboardFeedRepository : IDashboardFeedRepository
     {
-        public Task<IReadOnlyList<DashboardEventRow>> GetRecentEventsAsync(
-            CancellationToken cancellationToken = default)
-            => Task.FromResult<IReadOnlyList<DashboardEventRow>>([]);
+        public IReadOnlyDictionary<DateOnly, int> Alarms { get; init; } = new Dictionary<DateOnly, int>();
+        public IReadOnlyList<DashboardStatusCount> RequestStatuses { get; init; } = [];
+        public IReadOnlyDictionary<DateOnly, int> RequestsByDay { get; init; } = new Dictionary<DateOnly, int>();
+        public IReadOnlyList<DashboardStatusCount> ForecastStatuses { get; init; } = [];
 
-        public Task<IReadOnlyList<DashboardForecastRow>> GetRecentForecastsAsync(
+        public Task<IReadOnlyDictionary<DateOnly, int>> GetAlarmCountsByDayAsync(
+            DateTimeOffset fromInclusive,
+            DateTimeOffset toExclusive,
             CancellationToken cancellationToken = default)
-            => Task.FromResult<IReadOnlyList<DashboardForecastRow>>([]);
+            => Task.FromResult(Alarms);
+
+        public Task<IReadOnlyList<DashboardStatusCount>> GetRequestCountsByStatusAsync(
+            CancellationToken cancellationToken = default)
+            => Task.FromResult(RequestStatuses);
+
+        public Task<IReadOnlyDictionary<DateOnly, int>> GetRequestCountsByDayAsync(
+            DateTimeOffset fromInclusive,
+            DateTimeOffset toExclusive,
+            CancellationToken cancellationToken = default)
+            => Task.FromResult(RequestsByDay);
+
+        public Task<IReadOnlyList<DashboardStatusCount>> GetForecastCountsByStatusAsync(
+            DateTimeOffset fromInclusive,
+            DateTimeOffset toExclusive,
+            CancellationToken cancellationToken = default)
+            => Task.FromResult(ForecastStatuses);
     }
 }
