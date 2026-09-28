@@ -164,17 +164,16 @@ class PredictEngine:
 
         Same as_of for every category; per-category vector assembly and model
         calls reuse predict() verbatim, so results are identical to four
-        /predict calls. Categories the channel never trained on (wrong
-        subsystem — see feature_engine.CATS) come back applicable=False with
-        prediction=None instead of a meaningless score.
+        /predict calls. Every category is scored — a subject without training
+        history gets the documented NaN-lag vector, which LightGBM handles
+        natively. (The former has_subject applicability gate is gone: journal
+        subject ids come from the app domain and never match the organizer-id
+        keys of the training history, so the gate fired on EVERYTHING and
+        every forecast degraded to applicable=false stubs.)
         """
         as_of = as_of or datetime.now(timezone.utc)
-        store = get_store()
         out: list[AllPrediction] = []
         for cat in CATEGORIES:
-            if not store.has_subject(cat, subject_id):
-                out.append(AllPrediction(category=Category(cat), applicable=False))
-                continue
             p = self.predict(cat, subject_id, features, horizon_hours, as_of=as_of)
             out.append(AllPrediction(category=Category(cat), applicable=True, prediction=p))
         return AllCategoriesResponse(

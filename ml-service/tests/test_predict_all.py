@@ -101,15 +101,18 @@ def test_predict_all_returns_all_categories(eng):
 
 
 def test_predict_all_applicability_gate(eng):
+    """Contract since 2026-09-28: the has_subject gate is GONE.
+
+    Journal subject ids come from the app domain and never match the
+    organizer-id keys of the training history, so the old gate fired on
+    everything and every forecast degraded to applicable=false stubs. Now
+    all four categories are always scored (NaN lags are handled natively)."""
     e, _, _ = eng
     resp = e.predict_all("s1", {}, 24)
     by_cat = {p.category.value: p for p in resp.predictions}
-    assert by_cat["sensor-failure"].applicable and by_cat["sensor-failure"].prediction is not None
-    assert by_cat["fire-risk"].applicable and by_cat["fire-risk"].prediction is not None
-    assert by_cat["unauthorized-access"].applicable is False
-    assert by_cat["unauthorized-access"].prediction is None
-    assert by_cat["infrastructure-wear"].applicable is False
-    assert by_cat["infrastructure-wear"].prediction is None
+    for cat in ("sensor-failure", "fire-risk", "unauthorized-access", "infrastructure-wear"):
+        assert by_cat[cat].applicable is True
+        assert by_cat[cat].prediction is not None
 
 
 def test_predict_all_predictions_carry_scores(eng):
@@ -137,10 +140,12 @@ def test_predict_all_no_history_subject_still_scores_applicable(eng):
     e, _, _ = eng
     resp = e.predict_all("s0", {}, 24)
     by_cat = {p.category.value: p for p in resp.predictions}
-    # s0 is applicable only to sensor-failure; NaN lags -> base f_a missing -> 0.0 -> p=0
-    assert by_cat["sensor-failure"].applicable
+    # s0 has no history at all: NaN lags -> base f_a missing -> 0.0 -> p=0,
+    # but every category still scores (gate removed 2026-09-28).
+    for cat in ("sensor-failure", "fire-risk", "unauthorized-access", "infrastructure-wear"):
+        assert by_cat[cat].applicable is True
+        assert by_cat[cat].prediction is not None
     assert by_cat["sensor-failure"].prediction.probability == pytest.approx(0.0)
-    assert by_cat["fire-risk"].applicable is False
 
 
 # --------------------------------------------------------------------------- #
@@ -168,4 +173,4 @@ def test_predict_all_endpoint(eng, monkeypatch):
         "infrastructure-wear",
     ]
     ua = body["predictions"][2]
-    assert ua["applicable"] is False and ua["prediction"] is None
+    assert ua["applicable"] is True and ua["prediction"] is not None
