@@ -7,6 +7,10 @@ from typing import Any
 
 ML_BROKER_UUID = "77d902da-9f82-40cf-9674-926d4c04243d"
 HORIZON_HOURS = 24
+# Machine-readable marker for categories a channel never trained on
+# (feature_engine.CATS gate in ml-service). Consumers must key on this
+# value, not on the absence of the channel.
+UNPREDICTABLE = "unpredictable"
 
 # sensor_types from 016_1_add_data_dictionary.sql. Keep this explicit until
 # category applicability becomes data-driven.
@@ -52,11 +56,16 @@ def build_result_description(predictions: list[dict[str, Any]], creation_time: d
     valid_to = _iso(creation_time + timedelta(hours=HORIZON_HOURS))
     channels: dict[str, dict[str, dict[str, Any]]] = {}
     for prediction in predictions:
-        channels.setdefault(str(prediction["subject_id"]), {})[str(prediction["category"])] = {
-            "value": float(prediction["risk_score"]),
-            "valid_from": valid_from,
-            "valid_to": valid_to,
-        }
+        entry = (
+            {"status_code": UNPREDICTABLE}
+            if prediction.get("applicable") is False
+            else {
+                "value": float(prediction["risk_score"]),
+                "valid_from": valid_from,
+                "valid_to": valid_to,
+            }
+        )
+        channels.setdefault(str(prediction["subject_id"]), {})[str(prediction["category"])] = entry
     return {"channels": channels}
 
 

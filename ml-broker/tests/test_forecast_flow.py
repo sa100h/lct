@@ -40,6 +40,21 @@ def test_result_description_is_nested_by_channel_and_contains_validity_window():
     assert ML_BROKER_UUID == "77d902da-9f82-40cf-9674-926d4c04243d"
 
 
+def test_result_description_marks_non_applicable_as_unpredictable():
+    start = datetime(2026, 9, 27, 18, 0, tzinfo=timezone.utc)
+    description = build_result_description(
+        [
+            {"subject_id": "ch-1", "category": "fire-risk", "applicable": False},
+            {"subject_id": "ch-1", "category": "sensor-failure", "risk_score": 0.4},
+        ],
+        start,
+    )
+    entry = description["channels"]["ch-1"]["fire-risk"]
+    assert entry == {"status_code": "unpredictable"}
+    assert "value" not in entry and "valid_from" not in entry and "valid_to" not in entry
+    assert description["channels"]["ch-1"]["sensor-failure"]["value"] == 0.4
+
+
 T = datetime(2026, 9, 28, 12, 0, tzinfo=timezone.utc)
 
 

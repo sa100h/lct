@@ -149,7 +149,7 @@ class Db:
                               forecast_journal_id, forecast_name, features, dispatcher_object_id
                          FROM ml_predict_queue
                         WHERE status='pending' AND (retry_after IS NULL OR retry_after <= now())
-                        ORDER BY priority DESC, id LIMIT $1 FOR UPDATE SKIP LOCKED""",
+                        ORDER BY forecast_journal_id NULLS LAST, priority DESC, id LIMIT $1 FOR UPDATE SKIP LOCKED""",
                     limit,
                 )
                 if rows:
@@ -171,7 +171,7 @@ class Db:
     async def store_result(self, row_id: int, result: dict[str, Any]) -> None:
         async with self._pool.acquire() as conn:
             await conn.execute(
-                "UPDATE ml_predict_queue SET result=$2::jsonb WHERE id=$1",
+                "UPDATE ml_predict_queue SET result=$2::jsonb WHERE id=$1 AND status='running'",
                 row_id, json.dumps(result, default=str),
             )
 
