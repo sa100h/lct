@@ -40,13 +40,5 @@ public sealed class DashboardController(IDashboardQueryService dashboard) : Cont
                 .ToArray(),
             snapshot.Forecasts
                 .Select(item => new DashboardForecastResponse(item.Id, item.CreatedAt, item.Status))
-                .ToArray(),
-            snapshot.Requests
-                .Select(item => new DashboardRequestResponse(
-                    item.Id,
-                    item.Description,
-                    item.ObjectId,
-                    item.ObjectName,
-                    item.Status))
                 .ToArray());
 }

@@ -50,5 +50,8 @@ export function getSelectedMenuKey(pathname) {
   if (pathname === '/history' || pathname.startsWith('/history/')) {
     return '/prediction'
   }
+  if (pathname.startsWith('/requests/')) {
+    return '/requests'
+  }
   return pathname
 }

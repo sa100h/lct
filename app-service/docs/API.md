@@ -223,8 +223,7 @@ curl http://localhost:8080/health
 
 Нужны JWT и permission `module.dashboard`. Одна сводка для экрана «Дашборд»:
 цифры по объектам, до 20 проблемных, до 20 последних событий, до 10 запусков
-прогноза, до 20 заявок. У заявки `objectId` и `objectName` — **первый** элемент
-`dispatcher_objects_id`; если массива нет или id неизвестен — `objectId` 0 и пустое имя.
+прогноза. Заявки в ответ **не входят** — они в модуле `GET /requests`.
 
 **Ответ 200**
 
@@ -254,15 +253,6 @@ curl http://localhost:8080/health
       "id": "2c059017-47c7-480a-b0a1-516be249695d",
       "createdAt": "2026-09-25T10:30:00Z",
       "status": "pending"
-    }
-  ],
-  "requests": [
-    {
-      "id": "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
-      "description": "Проверить шкаф",
-      "objectId": 5,
-      "objectName": "объект Альфа",
-      "status": "Новая"
     }
   ]
 }
@@ -492,6 +482,81 @@ Query:
 | 403 | Нет `module.requests` |
 | 404 | Журнала нет |
 
+### `GET /requests`
+
+Нужны JWT и permission `module.requests`. Список заявок: `admin` и `dispatcher_ods` видят все, остальные — если `user_dispatcher_id` или `user_technician_id` равен `sub`. Пагинация: `page`, `pageSize` (макс. 20). `objectId` / `objectName` — первый элемент `dispatcher_objects_id`.
+
+**Ответ 200**
+
+```json
+{
+  "items": [
+    {
+      "id": "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+      "createdAt": "2026-09-28T08:00:00Z",
+      "description": "Проверить канал",
+      "objectId": 5,
+      "objectName": "объект Альфа",
+      "status": "Новая",
+      "dispatcherLogin": "dispetcher_ods",
+      "technicianLogin": "technik.test"
+    }
+  ],
+  "total": 1
+}
+```
+
+### `GET /requests/{id}`
+
+Нужны JWT и permission `module.requests`. Карточка: шапка и объекты заявки плюс предки для дерева. Чужая заявка (не создатель и не исполнитель, если роль не admin/ODS) — **404**, не 403.
+
+**Ответ 200**
+
+```json
+{
+  "id": "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+  "createdAt": "2026-09-28T08:00:00Z",
+  "description": "Проверить канал",
+  "status": "Новая",
+  "dispatcherLogin": "dispetcher_ods",
+  "technicianLogin": "technik.test",
+  "priority": 1,
+  "objectId": 5,
+  "objectName": "объект Альфа",
+  "objects": [
+    {
+      "id": 5,
+      "parentId": 1,
+      "name": "объект Альфа",
+      "latitude": 55.61,
+      "longitude": 37.5,
+      "statuses": ["Норма"],
+      "ownStatuses": ["Норма"],
+      "ownChannelCount": 1
+    }
+  ]
+}
+```
+
+### `PATCH /requests/{id}/status`
+
+Нужны JWT и permission `module.requests`. Любой, кто видит заявку, может поставить любой из статусов: «Новая», «В работе», «Закрыта».
+
+**Тело**
+
+```json
+{ "status": "В работе" }
+```
+
+**Ответ 204** без тела.
+
+| Код | Когда |
+|---|---|
+| 400 | Неизвестное имя статуса (`Неизвестный статус.`) |
+| 401 | Нет JWT |
+| 403 | Нет `module.requests` |
+| 404 | Заявки нет или она скрыта (`Заявка не найдена.`) |
+
 ---
 
 ## ML через app-service
@@ -674,6 +739,9 @@ curl -k https://localhost/api/app/authz/demo \
 | POST | `/forecasts/{id}/erroneous` | `/api/app/forecasts/{id}/erroneous` | Bearer + `module.history` |
 | GET | `/users` | `/api/app/users` | Bearer + `module.requests` |
 | POST | `/requests` | `/api/app/requests` | Bearer + `module.requests` |
+| GET | `/requests` | `/api/app/requests` | Bearer + `module.requests` |
+| GET | `/requests/{id}` | `/api/app/requests/{id}` | Bearer + `module.requests` |
+| PATCH | `/requests/{id}/status` | `/api/app/requests/{id}/status` | Bearer + `module.requests` |
 | POST | `/predict` | `/api/app/predict` | Bearer |
 | GET | `/authz/demo` | `/api/app/authz/demo` | Bearer + `demo.access` |
 | GET | `/health` | нет (напрямую :8080) | нет |

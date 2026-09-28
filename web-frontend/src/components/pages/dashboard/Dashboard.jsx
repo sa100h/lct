@@ -1,18 +1,13 @@
 import { useEffect, useState } from 'react'
-import { Alert, Spin, Table } from 'antd'
+import { Alert, Spin, Table, Tag } from 'antd'
 import { useSelector } from 'react-redux'
 import { Link, useNavigate } from 'react-router-dom'
 import { AuthHttpError } from '@/api/auth.js'
 import { getDashboard } from '@/api/dashboard.js'
+import { FORECAST_STATUS_LABEL, forecastStatusTagColor } from '@/components/pages/history/forecastStatusTag.js'
 import './Dashboard.css'
 
 const EMPTY = 'Нет данных'
-
-const FORECAST_STATUS = {
-  pending: 'Ожидание',
-  running: 'В работе',
-  done: 'Готово',
-}
 
 function formatWhen(value) {
   return new Date(value).toLocaleString('ru-RU')
@@ -170,22 +165,12 @@ export default function Dashboard() {
             {
               title: 'Статус',
               dataIndex: 'status',
-              render: (value) => FORECAST_STATUS[value] ?? value,
+              render: (value) => (
+                <Tag color={forecastStatusTagColor(value)}>
+                  {FORECAST_STATUS_LABEL[value] ?? value}
+                </Tag>
+              ),
             },
-          ]}
-        />
-      </DashboardSection>
-
-      <DashboardSection title="Заявки">
-        <Table
-          pagination={false}
-          locale={{ emptyText: EMPTY }}
-          rowKey="id"
-          dataSource={data.requests ?? []}
-          columns={[
-            { title: 'Описание', dataIndex: 'description' },
-            { title: 'Объект', dataIndex: 'objectName' },
-            { title: 'Статус', dataIndex: 'status' },
           ]}
         />
       </DashboardSection>

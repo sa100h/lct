@@ -1,19 +1,14 @@
 import { useEffect, useState } from 'react'
-import { Alert, Button, DatePicker, Select, Spin, Table } from 'antd'
+import { Alert, Button, DatePicker, Select, Spin, Table, Tag } from 'antd'
 import { RightOutlined } from '@ant-design/icons'
 import { useNavigate } from 'react-router-dom'
 import { AuthHttpError } from '@/api/auth.js'
 import { listForecastAuthors, listForecastHistory } from '@/api/forecastHistory.js'
+import { FORECAST_STATUS_LABEL, forecastStatusTagColor } from './forecastStatusTag.js'
 import './History.css'
 
 const EMPTY = 'Нет данных'
 const PAGE_SIZE = 20
-
-const FORECAST_STATUS = {
-  pending: 'Ожидание',
-  running: 'В работе',
-  done: 'Готово',
-}
 
 function formatWhen(value) {
   return new Date(value).toLocaleString('ru-RU')
@@ -153,7 +148,11 @@ export default function HistoryList({ refreshKey = 0 }) {
           {
             title: 'Статус',
             dataIndex: 'status',
-            render: (value) => FORECAST_STATUS[value] ?? value,
+            render: (value) => (
+              <Tag color={forecastStatusTagColor(value)}>
+                {FORECAST_STATUS_LABEL[value] ?? value}
+              </Tag>
+            ),
           },
           { title: 'Объекты', dataIndex: 'objectCount' },
           {

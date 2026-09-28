@@ -73,9 +73,15 @@ test('mergeExpandedKeys adds ancestors and keeps current', () => {
   assert.deepEqual([...keys].sort(), ['5', '5773'].sort())
 })
 
-test('scrollTreeToKey calls scrollTo and scrollIntoView', async () => {
+test('scrollTreeToKey defers scrollTo until after two animation frames', () => {
   let called
   let scrolled = false
+  const frames = []
+  const originalRaf = globalThis.requestAnimationFrame
+  globalThis.requestAnimationFrame = (callback) => {
+    frames.push(callback)
+    return frames.length
+  }
   const tree = {
     scrollTo(args) {
       called = args
@@ -90,8 +96,16 @@ test('scrollTreeToKey calls scrollTo and scrollIntoView', async () => {
       },
     },
   }
-  scrollTreeToKey(tree, 5122)
-  await Promise.resolve()
-  assert.deepEqual(called, { key: '5122' })
-  assert.equal(scrolled, true)
+  try {
+    scrollTreeToKey(tree, 5122)
+    assert.equal(called, undefined)
+    assert.equal(scrolled, false)
+    frames[0]()
+    assert.equal(called, undefined)
+    frames[1]()
+    assert.deepEqual(called, { key: '5122' })
+    assert.equal(scrolled, true)
+  } finally {
+    globalThis.requestAnimationFrame = originalRaf
+  }
 })

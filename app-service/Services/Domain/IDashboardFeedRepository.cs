@@ -9,7 +9,4 @@ public interface IDashboardFeedRepository
 
     Task<IReadOnlyList<DashboardForecastRow>> GetRecentForecastsAsync(
         CancellationToken cancellationToken = default);
-
-    Task<IReadOnlyList<DashboardRequestRow>> GetRecentRequestsAsync(
-        CancellationToken cancellationToken = default);
 }

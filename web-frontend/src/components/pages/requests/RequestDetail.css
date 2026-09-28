@@ -1,0 +1,53 @@
+.request-detail {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  height: calc(100vh - 64px - 32px);
+  min-height: 360px;
+}
+
+.request-detail .map-page {
+  flex: 1;
+  min-height: 0;
+}
+
+.request-detail-error {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  align-items: flex-start;
+}
+
+.request-detail-spin {
+  display: block;
+  margin: 32px auto;
+}
+
+.request-detail-header {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.request-detail-status-label {
+  font-size: 14px;
+  color: #111827;
+}
+
+.request-detail-status {
+  min-width: 160px;
+}
+
+.request-detail-description {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+  color: #111827;
+}
+
+.request-detail-meta {
+  margin: 0;
+  color: #6b7280;
+  font-size: 14px;
+}

@@ -119,3 +119,11 @@ test('getSelectedMenuKey highlights Прогноз on history routes', () => {
   assert.equal(getSelectedMenuKey('/map'), '/map')
   assert.equal(getSelectedMenuKey('/'), '/')
 })
+
+test('getSelectedMenuKey highlights Заявки on request detail', () => {
+  assert.equal(getSelectedMenuKey('/requests'), '/requests')
+  assert.equal(
+    getSelectedMenuKey('/requests/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'),
+    '/requests',
+  )
+})

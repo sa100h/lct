@@ -88,6 +88,43 @@ public sealed class RequestCommandServiceTests
         Assert.False(requests.Inserted);
     }
 
+    [Fact]
+    public async Task UpdateStatusAsync_RejectsUnknown()
+    {
+        var requests = new RecordingRequestRepository { StatusExists = false };
+        var service = new RequestCommandService(requests, new StubSubtreeRepository([]));
+
+        var exception = await Assert.ThrowsAsync<ArgumentException>(() => service.UpdateStatusAsync(
+            Guid.NewGuid(),
+            true,
+            Guid.NewGuid(),
+            "Неизвестный",
+            TestContext.Current.CancellationToken));
+
+        Assert.Equal(RequestCommandService.UnknownStatus, exception.Message);
+        Assert.False(requests.StatusUpdated);
+    }
+
+    [Fact]
+    public async Task UpdateStatusAsync_Missing_KeyNotFound()
+    {
+        var requests = new RecordingRequestRepository { StatusExists = true, UpdateAffected = false };
+        var service = new RequestCommandService(requests, new StubSubtreeRepository([]));
+        var id = Guid.NewGuid();
+
+        var exception = await Assert.ThrowsAsync<KeyNotFoundException>(() => service.UpdateStatusAsync(
+            id,
+            false,
+            Guid.NewGuid(),
+            "В работе",
+            TestContext.Current.CancellationToken));
+
+        Assert.Equal(RequestCommandService.MissingRequest, exception.Message);
+        Assert.True(requests.StatusUpdated);
+        Assert.Equal(id, requests.UpdatedId);
+        Assert.Equal("В работе", requests.UpdatedStatus);
+    }
+
     private sealed class RecordingRequestRepository : IRequestRepository
     {
         public bool JournalExists { get; init; }
@@ -98,6 +135,11 @@ public sealed class RequestCommandServiceTests
         public Guid DispatcherUserId { get; private set; }
         public IReadOnlyList<int>? ObjectIds { get; private set; }
         public int? Priority { get; private set; }
+        public bool StatusExists { get; init; }
+        public bool UpdateAffected { get; init; }
+        public bool StatusUpdated { get; private set; }
+        public Guid UpdatedId { get; private set; }
+        public string? UpdatedStatus { get; private set; }
 
         public Task<bool> ForecastJournalExistsAsync(Guid id, CancellationToken cancellationToken = default)
             => Task.FromResult(JournalExists);
@@ -120,6 +162,34 @@ public sealed class RequestCommandServiceTests
             ObjectIds = objectIds;
             Priority = priority;
             return Task.FromResult(InsertedId);
+        }
+
+        public Task<(IReadOnlyList<RequestListItem> Items, int Total)> ListAsync(
+            Guid? restrictToUserId,
+            int offset,
+            int limit,
+            CancellationToken cancellationToken = default)
+            => throw new NotSupportedException();
+
+        public Task<RequestHeader?> GetHeaderAsync(
+            Guid id,
+            Guid? restrictToUserId,
+            CancellationToken cancellationToken = default)
+            => throw new NotSupportedException();
+
+        public Task<bool> StatusExistsAsync(string name, CancellationToken cancellationToken = default)
+            => Task.FromResult(StatusExists);
+
+        public Task<bool> UpdateStatusAsync(
+            Guid id,
+            string statusName,
+            Guid? restrictToUserId,
+            CancellationToken cancellationToken = default)
+        {
+            StatusUpdated = true;
+            UpdatedId = id;
+            UpdatedStatus = statusName;
+            return Task.FromResult(UpdateAffected);
         }
     }
 

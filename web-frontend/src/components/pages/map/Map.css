@@ -145,10 +145,8 @@
 
 .map-marker-active {
     transform: scale(1.25);
-}
-
-.map-marker-active:not(.map-marker-ok):not(.map-marker-alert):not(.map-marker-risk):not(.map-marker-none) {
-    background: #fa541c;
+    border-color: #fa8c16;
+    box-shadow: 0 0 0 3px #fa8c16, 0 0 0 1px rgba(0, 0, 0, 0.2);
 }
 
 .map-tree-node {

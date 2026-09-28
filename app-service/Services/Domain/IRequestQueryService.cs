@@ -2,17 +2,18 @@ using AppService.Models;
 
 namespace AppService.Services.Domain;
 
-public interface IRequestCommandService
+public interface IRequestQueryService
 {
-    Task<Guid> CreateAsync(
-        Guid dispatcherUserId,
-        CreateRequestCommand command,
-        CancellationToken cancellationToken = default);
-
-    Task UpdateStatusAsync(
-        Guid id,
+    Task<RequestListPage> ListAsync(
         bool seesAll,
         Guid userId,
-        string status,
+        int page,
+        int pageSize,
+        CancellationToken cancellationToken = default);
+
+    Task<RequestDetail?> GetAsync(
+        bool seesAll,
+        Guid userId,
+        Guid id,
         CancellationToken cancellationToken = default);
 }

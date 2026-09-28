@@ -84,9 +84,5 @@ public sealed class DashboardQueryServiceTests
         public Task<IReadOnlyList<DashboardForecastRow>> GetRecentForecastsAsync(
             CancellationToken cancellationToken = default)
             => Task.FromResult<IReadOnlyList<DashboardForecastRow>>([]);
-
-        public Task<IReadOnlyList<DashboardRequestRow>> GetRecentRequestsAsync(
-            CancellationToken cancellationToken = default)
-            => Task.FromResult<IReadOnlyList<DashboardRequestRow>>([]);
     }
 }

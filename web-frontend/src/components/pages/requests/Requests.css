@@ -1,0 +1,18 @@
+.requests-page {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.requests-alert {
+  margin: 0;
+}
+
+.requests-spin {
+  display: block;
+  margin: 32px auto;
+}
+
+.requests-row {
+  cursor: pointer;
+}

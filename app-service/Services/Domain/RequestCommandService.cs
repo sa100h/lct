@@ -10,6 +10,8 @@ public sealed class RequestCommandService(
     public const string MissingTechnician = "Техник не найден.";
     public const string MissingObject = "Объект не найден.";
     public const string DescriptionRequired = "Описание обязательно.";
+    public const string MissingRequest = "Заявка не найдена.";
+    public const string UnknownStatus = "Неизвестный статус.";
 
     public async Task<Guid> CreateAsync(
         Guid dispatcherUserId,
@@ -46,5 +48,29 @@ public sealed class RequestCommandService(
             objectIds,
             command.Priority,
             cancellationToken);
+    }
+
+    public async Task UpdateStatusAsync(
+        Guid id,
+        bool seesAll,
+        Guid userId,
+        string status,
+        CancellationToken cancellationToken = default)
+    {
+        var name = status?.Trim() ?? "";
+        if (name.Length == 0 || !await requests.StatusExistsAsync(name, cancellationToken))
+        {
+            throw new ArgumentException(UnknownStatus);
+        }
+
+        var updated = await requests.UpdateStatusAsync(
+            id,
+            name,
+            seesAll ? null : userId,
+            cancellationToken);
+        if (!updated)
+        {
+            throw new KeyNotFoundException(MissingRequest);
+        }
     }
 }

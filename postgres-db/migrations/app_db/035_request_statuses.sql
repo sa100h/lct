@@ -1,0 +1,5 @@
+INSERT INTO request_statuses (id, name)
+VALUES
+    ('00000000-0000-0000-0000-000000000002', 'В работе'),
+    ('00000000-0000-0000-0000-000000000003', 'Закрыта')
+ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name;

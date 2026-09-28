@@ -26,12 +26,15 @@ export function scrollTreeToKey(tree, key) {
     return
   }
   const id = String(key)
-  queueMicrotask(() => {
+  const run = () => {
     tree.scrollTo?.({ key: id })
     const node =
       tree.nativeElement?.querySelector?.('.ant-tree-treenode-selected') ??
       document.querySelector('.map-tree .ant-tree-treenode-selected')
     node?.scrollIntoView?.({ block: 'nearest' })
+  }
+  requestAnimationFrame(() => {
+    requestAnimationFrame(run)
   })
 }
 

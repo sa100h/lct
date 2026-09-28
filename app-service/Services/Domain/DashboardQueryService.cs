@@ -14,7 +14,6 @@ public sealed class DashboardQueryService(
         var all = await objects.GetAllWithDescendantStatusesAsync(cancellationToken);
         var events = await feeds.GetRecentEventsAsync(cancellationToken);
         var forecastRows = await feeds.GetRecentForecastsAsync(cancellationToken);
-        var requests = await feeds.GetRecentRequestsAsync(cancellationToken);
 
         var normal = 0;
         var problems = new List<DashboardProblemObject>();
@@ -42,7 +41,7 @@ public sealed class DashboardQueryService(
                 MapForecastStatus(row.StartCompositionTime, row.EndCompositionTime)))
             .ToArray();
 
-        return new DashboardSnapshot(summary, events, forecasts, requests);
+        return new DashboardSnapshot(summary, events, forecasts);
     }
 
     public static bool IsNormal(IReadOnlyList<string> statuses)

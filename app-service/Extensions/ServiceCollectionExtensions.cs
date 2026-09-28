@@ -60,6 +60,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IAutomaticForecastService, AutomaticForecastService>();
         services.AddScoped<IForecastHistoryQueryService, ForecastHistoryQueryService>();
         services.AddScoped<IUserQueryService, UserQueryService>();
+        services.AddScoped<IRequestQueryService, RequestQueryService>();
         services.AddScoped<IRequestCommandService, RequestCommandService>();
         services.AddScoped<IForecastErroneousService, ForecastErroneousService>();
         services.AddSingleton<PostgresMigrator>();
