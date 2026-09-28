@@ -1,6 +1,7 @@
 """Pure forecast-flow rules shared by the database worker and tests."""
 from __future__ import annotations
 
+from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
@@ -57,3 +58,42 @@ def build_result_description(predictions: list[dict[str, Any]], creation_time: d
             "valid_to": valid_to,
         }
     return {"channels": channels}
+
+
+@dataclass
+class PredictChunk:
+    """One /predict_all_batch call: subjects of a single journal + their rows."""
+
+    journal_id: str | None
+    as_of: datetime
+    subjects: list[str] = field(default_factory=list)
+    features: dict[str, dict[str, Any]] = field(default_factory=dict)
+    rows: list[Any] = field(default_factory=list)  # QueueRow; Any avoids a db import cycle
+
+
+def build_chunks(rows: list[Any], max_subjects: int) -> list[PredictChunk]:
+    """Group queue rows into /predict_all_batch chunks.
+
+    Invariants: input order is (forecast_journal_id, id) — claim_batch
+    guarantees it; one chunk never spans two journals (each journal has its
+    own as_of); a subject's category rows never split across chunks (a
+    boundary-starting subject overflows the chunk by one instead).
+    """
+    chunks: list[PredictChunk] = []
+    cur: PredictChunk | None = None
+    for row in rows:
+        boundary = (
+            cur is None
+            or cur.journal_id != row.forecast_journal_id
+            or cur.as_of != row.as_of
+            or (len(cur.subjects) >= max_subjects and row.subject_id not in cur.features)
+        )
+        if boundary:
+            cur = PredictChunk(journal_id=row.forecast_journal_id, as_of=row.as_of)
+            chunks.append(cur)
+        assert cur is not None  # narrowed by the boundary check above
+        if row.subject_id not in cur.features:
+            cur.subjects.append(row.subject_id)
+            cur.features[row.subject_id] = row.features
+        cur.rows.append(row)
+    return chunks
