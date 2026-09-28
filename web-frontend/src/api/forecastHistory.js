@@ -42,3 +42,27 @@ export async function getForecastHistory(id) {
   }
   return response.json()
 }
+
+export async function markForecastErroneous(id, dispatcherObjectId) {
+  const response = await apiFetch(`/api/app/forecasts/${id}/erroneous`, {
+    method: 'POST',
+    body: JSON.stringify({ dispatcherObjectId }),
+  })
+  const text = await response.text()
+  let data = null
+  if (text) {
+    try {
+      data = JSON.parse(text)
+    } catch {
+      data = null
+    }
+  }
+  if (response.status === 204) {
+    return
+  }
+  const error = new AuthHttpError(response.status)
+  if (data && typeof data.error === 'string' && data.error) {
+    error.displayMessage = data.error
+  }
+  throw error
+}

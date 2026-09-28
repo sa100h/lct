@@ -44,5 +44,10 @@ public sealed class DispatcherObjectQueryServiceTests
             CallCount++;
             return Task.FromResult(result);
         }
+
+        public Task<IReadOnlyList<int>> GetSubtreeIdsAsync(
+            int rootId,
+            CancellationToken cancellationToken = default)
+            => Task.FromResult<IReadOnlyList<int>>([]);
     }
 }

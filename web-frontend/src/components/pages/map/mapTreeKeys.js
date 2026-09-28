@@ -17,18 +17,46 @@ export function ancestorKeys(objects, id) {
   return keys
 }
 
-export function toMapMarkers(objects) {
+export function mergeExpandedKeys(current, objects, id) {
+  return [...new Set([...(current ?? []), ...ancestorKeys(objects, id)])]
+}
+
+export function scrollTreeToKey(tree, key) {
+  if (tree == null || key == null) {
+    return
+  }
+  const id = String(key)
+  queueMicrotask(() => {
+    tree.scrollTo?.({ key: id })
+    const node =
+      tree.nativeElement?.querySelector?.('.ant-tree-treenode-selected') ??
+      document.querySelector('.map-tree .ant-tree-treenode-selected')
+    node?.scrollIntoView?.({ block: 'nearest' })
+  })
+}
+
+export function toMapMarkers(objects, toneOf) {
   return objects.map((object) => {
     const marker = {
       id: object.id,
       coordinates: [object.longitude, object.latitude],
     }
-    const tone = mapOwnTone(object)
+    const tone = toneOf ? toneOf(object) : mapOwnTone(object)
     if (tone) {
       marker.tone = tone
     }
     return marker
   })
+}
+
+export function mapForecastTone(hasHighRisk) {
+  if (hasHighRisk === true) {
+    return 'alert'
+  }
+  if (hasHighRisk === false) {
+    return 'ok'
+  }
+  return 'none'
 }
 
 const NORMAL = 'Норма'

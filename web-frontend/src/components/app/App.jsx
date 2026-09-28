@@ -15,9 +15,8 @@ import Dashboard from '../pages/dashboard/Dashboard'
 import MapPage from '../pages/map/Map'
 import Prediction from '../pages/prediction/Prediction'
 import HistoryDetail from '../pages/history/HistoryDetail.jsx'
-import Notifications from '../pages/notifications/Notifications'
+import Requests from '../pages/requests/Requests'
 import Reports from '../pages/reports/Reports'
-import Settings from '../pages/settings/Settings'
 
 import { clearSession, setSession } from '@/store/authSlice.js'
 import { store } from '@/store/index.js'
@@ -46,9 +45,8 @@ const router = createBrowserRouter([
           { path: '/prediction', element: <Prediction /> },
           { path: '/history', element: <Navigate to="/prediction" replace /> },
           { path: '/history/:id', element: <HistoryDetail /> },
-          { path: '/notifications', element: <Notifications /> },
+          { path: '/requests', element: <Requests /> },
           { path: '/reports', element: <Reports /> },
-          { path: '/settings', element: <Settings /> },
         ],
       },
     ],

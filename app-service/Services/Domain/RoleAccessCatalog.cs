@@ -49,4 +49,13 @@ public sealed class RoleAccessCatalog
     }
 
     public IReadOnlyList<string> GetPermissions(string role) => permissionsByRole[role];
+
+    public static string ToDatabaseRoleName(string jwtRole) => jwtRole switch
+    {
+        "admin" => "Admins",
+        "technician" => "Technics",
+        "dispatcher_ods" => "Dispetchers_ODS",
+        "dispatcher_district" => "Dispetchers_rayon",
+        _ => throw new ArgumentException($"Unknown role '{jwtRole}'.", nameof(jwtRole)),
+    };
 }

@@ -1,10 +1,13 @@
 using AppService.Models;
+using AppService.Services.Infrastructure;
 
 namespace AppService.Services.Domain;
 
 public sealed class ForecastHistoryQueryService(
     IForecastJournalRepository journal,
-    IDispatcherObjectRepository objects) : IForecastHistoryQueryService
+    IDispatcherObjectRepository objects,
+    IForecastResultRepository results,
+    ForecastOptions forecast) : IForecastHistoryQueryService
 {
     public const int MaxPageSize = 20;
 
@@ -68,16 +71,28 @@ public sealed class ForecastHistoryQueryService(
             }
         }
         var selected = all.Where(item => includedIds.Contains(item.Id));
+        var rows = await results.ListByJournalAsync(id, cancellationToken);
 
         var mapped = selected
-            .Select(item => new ForecastHistoryObject(
-                item.Id,
-                item.ParentId,
-                item.Name,
-                item.Latitude,
-                item.Longitude,
-                item.Statuses,
-                false))
+            .Select(item =>
+            {
+                rows.TryGetValue(item.Id, out var row);
+                var erroneous = row?.IsErroneous == true;
+                var risk = erroneous
+                    ? false
+                    : ForecastRisk.FromDescription(row?.Description, forecast.RiskThreshold);
+                return new ForecastHistoryObject(
+                    item.Id,
+                    item.ParentId,
+                    item.Name,
+                    item.Latitude,
+                    item.Longitude,
+                    item.Statuses,
+                    risk,
+                    item.OwnStatuses,
+                    item.OwnChannelCount,
+                    erroneous);
+            })
             .ToArray();
 
         return new ForecastHistoryDetail(

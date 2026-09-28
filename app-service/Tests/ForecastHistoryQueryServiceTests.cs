@@ -1,5 +1,6 @@
 using AppService.Models;
 using AppService.Services.Domain;
+using AppService.Services.Infrastructure;
 using Xunit;
 
 namespace AppService.Tests;
@@ -19,7 +20,7 @@ public sealed class ForecastHistoryQueryServiceTests
             ],
             Total = 1,
         };
-        var service = new ForecastHistoryQueryService(journal, new StubDispatcherObjectRepository([]));
+        var service = CreateService(journal, new StubDispatcherObjectRepository([]));
 
         var page = await service.ListAsync(
             new ForecastHistoryListQuery(null, null, null, 1, 50),
@@ -38,7 +39,7 @@ public sealed class ForecastHistoryQueryServiceTests
     [Fact]
     public async Task ListAsync_RejectsInvalidPage()
     {
-        var service = new ForecastHistoryQueryService(
+        var service = CreateService(
             new StubForecastJournalRepository(),
             new StubDispatcherObjectRepository([]));
 
@@ -49,7 +50,7 @@ public sealed class ForecastHistoryQueryServiceTests
     }
 
     [Fact]
-    public async Task GetByIdAsync_FiltersObjectsAndSetsHasHighRiskFalse()
+    public async Task GetByIdAsync_FiltersObjectsAndSetsHasHighRiskNullWithoutResult()
     {
         var id = Guid.Parse("2c059017-47c7-480a-b0a1-516be249695d");
         var created = new DateTimeOffset(2026, 9, 25, 10, 30, 0, TimeSpan.Zero);
@@ -57,7 +58,7 @@ public sealed class ForecastHistoryQueryServiceTests
         {
             Header = new ForecastHistoryHeader(id, created, "admin.test", null, null, [2]),
         };
-        var service = new ForecastHistoryQueryService(
+        var service = CreateService(
             journal,
             new StubDispatcherObjectRepository(
             [
@@ -70,14 +71,15 @@ public sealed class ForecastHistoryQueryServiceTests
         Assert.NotNull(detail);
         var obj = Assert.Single(detail.Objects);
         Assert.Equal(2, obj.Id);
-        Assert.False(obj.HasHighRisk);
+        Assert.Null(obj.HasHighRisk);
+        Assert.False(obj.IsErroneous);
         Assert.Equal("pending", detail.Status);
     }
 
     [Fact]
     public async Task GetByIdAsync_ReturnsNullWhenMissing()
     {
-        var service = new ForecastHistoryQueryService(
+        var service = CreateService(
             new StubForecastJournalRepository(),
             new StubDispatcherObjectRepository([]));
 
@@ -103,13 +105,97 @@ public sealed class ForecastHistoryQueryServiceTests
             new DispatcherObjectInfo(3, 2, "sensor object", 1, "district", 37.45, 55.6, [], 0, [], 0),
             new DispatcherObjectInfo(4, 1, "unrelated", 1, "district", 37.45, 55.6, [], 0, [], 0),
         ]);
-        var service = new ForecastHistoryQueryService(journal, objects);
+        var service = CreateService(journal, objects);
 
         var detail = await service.GetByIdAsync(id, TestContext.Current.CancellationToken);
 
         Assert.NotNull(detail);
         Assert.Equal([1, 2, 3], detail.Objects.Select(item => item.Id));
+        Assert.All(detail.Objects, item => Assert.Null(item.HasHighRisk));
     }
+
+    [Fact]
+    public async Task GetByIdAsync_CopiesOwnStatusesFromDispatcherObject()
+    {
+        var id = Guid.NewGuid();
+        var journal = new StubForecastJournalRepository
+        {
+            Header = new ForecastHistoryHeader(id, DateTimeOffset.UtcNow, "admin.test", null, null, [3]),
+        };
+        IReadOnlyList<string> own = ["Нет связи"];
+        var objects = new StubDispatcherObjectRepository(
+        [
+            new DispatcherObjectInfo(3, null, "ДУ", 1, "district", 37.45, 55.6, ["Нет связи"], 1, own, 1),
+        ]);
+        var service = CreateService(journal, objects);
+
+        var detail = await service.GetByIdAsync(id, TestContext.Current.CancellationToken);
+
+        var obj = Assert.Single(detail!.Objects);
+        Assert.Equal(own, obj.OwnStatuses);
+        Assert.Equal(1, obj.OwnChannelCount);
+    }
+
+    [Fact]
+    public async Task GetByIdAsync_SetsHasHighRiskFromDescriptionAndThreshold()
+    {
+        var id = Guid.NewGuid();
+        var journal = new StubForecastJournalRepository
+        {
+            Header = new ForecastHistoryHeader(id, DateTimeOffset.UtcNow, "admin.test", null, null, [1, 2, 3]),
+        };
+        var rows = new Dictionary<int, ForecastJournalResult>
+        {
+            [1] = new("""{"channels":{"a":{"fire-risk":{"value":0.9}}}}""", false),
+            [2] = new("""{"channels":{"a":{"fire-risk":{"value":0.1}}}}""", false),
+            [3] = new("{}", false),
+        };
+        var service = CreateService(
+            journal,
+            new StubDispatcherObjectRepository([Object(1), Object(2), Object(3)]),
+            rows,
+            threshold: 0.5);
+
+        var detail = await service.GetByIdAsync(id, TestContext.Current.CancellationToken);
+
+        Assert.Equal([true, false, null], detail!.Objects.Select(item => item.HasHighRisk));
+    }
+
+    [Fact]
+    public async Task GetByIdAsync_ErroneousForcesHasHighRiskFalse()
+    {
+        var id = Guid.NewGuid();
+        var journal = new StubForecastJournalRepository
+        {
+            Header = new ForecastHistoryHeader(id, DateTimeOffset.UtcNow, "admin.test", null, null, [1]),
+        };
+        var rows = new Dictionary<int, ForecastJournalResult>
+        {
+            [1] = new("""{"channels":{"a":{"fire-risk":{"value":0.9}}}}""", true),
+        };
+        var service = CreateService(
+            journal,
+            new StubDispatcherObjectRepository([Object(1)]),
+            rows,
+            threshold: 0.5);
+
+        var detail = await service.GetByIdAsync(id, TestContext.Current.CancellationToken);
+
+        var obj = Assert.Single(detail!.Objects);
+        Assert.True(obj.IsErroneous);
+        Assert.False(obj.HasHighRisk);
+    }
+
+    private static ForecastHistoryQueryService CreateService(
+        IForecastJournalRepository journal,
+        IDispatcherObjectRepository objects,
+        IReadOnlyDictionary<int, ForecastJournalResult>? rows = null,
+        double threshold = 0.5)
+        => new(
+            journal,
+            objects,
+            new StubForecastResultRepository(rows ?? new Dictionary<int, ForecastJournalResult>()),
+            new ForecastOptions { RiskThreshold = threshold });
 
     private static DispatcherObjectInfo Object(int id)
         => new(id, null, $"o{id}", 1, "district", 37.45, 55.6, [], 0, [], 0);
@@ -120,6 +206,30 @@ public sealed class ForecastHistoryQueryServiceTests
         public Task<IReadOnlyList<DispatcherObjectInfo>> GetAllWithDescendantStatusesAsync(
             CancellationToken cancellationToken = default)
             => Task.FromResult(result);
+
+        public Task<IReadOnlyList<int>> GetSubtreeIdsAsync(
+            int rootId,
+            CancellationToken cancellationToken = default)
+            => Task.FromResult<IReadOnlyList<int>>([]);
+    }
+
+    private sealed class StubForecastResultRepository(
+        IReadOnlyDictionary<int, ForecastJournalResult> rows) : IForecastResultRepository
+    {
+        public Task<bool> JournalExistsAsync(Guid journalId, CancellationToken cancellationToken = default)
+            => throw new NotSupportedException();
+
+        public Task MarkErroneousAsync(
+            Guid journalId,
+            Guid dispatcherUserId,
+            IReadOnlyList<int> objectIds,
+            CancellationToken cancellationToken = default)
+            => throw new NotSupportedException();
+
+        public Task<IReadOnlyDictionary<int, ForecastJournalResult>> ListByJournalAsync(
+            Guid journalId,
+            CancellationToken cancellationToken = default)
+            => Task.FromResult(rows);
     }
 
     private sealed class StubForecastJournalRepository : IForecastJournalRepository

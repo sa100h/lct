@@ -16,10 +16,10 @@ JSON: `Content-Type: application/json`, имена полей **camelCase**.
 
 | Роль JWT | `module.*` |
 |---|---|
-| `admin` | home, dashboard, map, prediction, history, notifications, reports, settings |
-| `technician` | home, dashboard, map |
-| `dispatcher_ods` | home, dashboard, map, history, notifications, reports |
-| `dispatcher_district` | home, map, history, notifications |
+| `admin` | dashboard, map, prediction, history, requests, reports |
+| `technician` | dashboard, map, requests, reports |
+| `dispatcher_ods` | dashboard, map, prediction, history, requests, reports |
+| `dispatcher_district` | map, history, requests, reports |
 
 В поле `login` — `sAMAccountName` без домена. Демо-учётки создаёт `ad/init/01-users-groups.sh` (стенд, не для продакшена):
 
@@ -223,7 +223,8 @@ curl http://localhost:8080/health
 
 Нужны JWT и permission `module.dashboard`. Одна сводка для экрана «Дашборд»:
 цифры по объектам, до 20 проблемных, до 20 последних событий, до 10 запусков
-прогноза, до 20 заявок.
+прогноза, до 20 заявок. У заявки `objectId` и `objectName` — **первый** элемент
+`dispatcher_objects_id`; если массива нет или id неизвестен — `objectId` 0 и пустое имя.
 
 **Ответ 200**
 
@@ -376,7 +377,12 @@ Query:
 
 ### `GET /forecasts/{id}`
 
-Нужны JWT и permission `module.history`. Деталь запуска: объекты с координатами и `hasHighRisk` (пока всегда `false`).
+Нужны JWT и permission `module.history`. Деталь запуска: объекты с координатами и
+`hasHighRisk` (`null` — нет прогноза, `false` — в норме, `true` — отрицательный).
+Порог — `Forecast:RiskThreshold` в appsettings (env `Forecast__RiskThreshold`),
+по умолчанию `0.5`; красный, если хотя бы одно `channels.*.*.value` ≥ порога.
+`isErroneous` — `forecast_results.is_erroneous`; нет строки → `false`. Если
+`isErroneous` true, `hasHighRisk` всегда `false`. Поля в JSON не опускаются.
 
 Список объектов строится по каналам из `forecast_channels` и включает их объекты-предки,
 чтобы сохранить дерево истории.
@@ -397,7 +403,22 @@ Query:
       "latitude": 55.6,
       "longitude": 37.45,
       "statuses": [],
-      "hasHighRisk": false
+      "hasHighRisk": null,
+      "ownStatuses": ["Норма"],
+      "ownChannelCount": 3,
+      "isErroneous": false
+    },
+    {
+      "id": 5122,
+      "name": "ДУ",
+      "parentId": 20,
+      "latitude": 55.62,
+      "longitude": 37.51,
+      "statuses": [],
+      "hasHighRisk": false,
+      "ownStatuses": ["Норма"],
+      "ownChannelCount": 1,
+      "isErroneous": true
     }
   ]
 }
@@ -405,10 +426,71 @@ Query:
 
 | Код | Когда |
 |---|---|
-| 400 | Битые query (`GET /forecasts`) |
 | 401 | Нет JWT |
 | 403 | Нет права `module.history` |
-| 404 | Нет журнала (`GET /forecasts/{id}`) |
+| 404 | Нет журнала |
+
+### `POST /forecasts/{id}/erroneous`
+
+Нужны JWT и permission `module.history`. Помечает выбранный объект и всех потомков как ошибочные (`forecast_results.is_erroneous`). Статус журнала не меняется. Повтор идемпотентен.
+
+**Тело**
+
+```json
+{ "dispatcherObjectId": 5 }
+```
+
+**Ответ 204** без тела.
+
+| Код | Когда |
+|---|---|
+| 400 | Объект не найден |
+| 401 | Нет JWT |
+| 403 | Нет `module.history` |
+| 404 | Журнала нет |
+
+---
+
+## Пользователи и заявки
+
+### `GET /users`
+
+Нужны JWT и permission `module.requests`. Активные пользователи с ролью из таблицы `roles`. Пример: `?role=Technics`.
+
+**Ответ 200**
+
+```json
+[{ "id": "03863c40-04e4-4ffe-b7cf-3dd31dab0ade", "login": "technik.test" }]
+```
+
+### `POST /requests`
+
+Нужны JWT и permission `module.requests`. Создаёт заявку на журнал прогноза: выбранный объект и все потомки. Диспетчер — `sub` JWT. Статус «Новая».
+
+**Тело**
+
+```json
+{
+  "forecastJournalId": "2c059017-47c7-480a-b0a1-516be249695d",
+  "dispatcherObjectId": 5,
+  "description": "Проверить канал",
+  "priority": 1,
+  "technicianId": "03863c40-04e4-4ffe-b7cf-3dd31dab0ade"
+}
+```
+
+**Ответ 201**
+
+```json
+{ "id": "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa" }
+```
+
+| Код | Когда |
+|---|---|
+| 400 | Нет описания, техник не Technics, объект не найден |
+| 401 | Нет JWT |
+| 403 | Нет `module.requests` |
+| 404 | Журнала нет |
 
 ---
 
@@ -589,6 +671,9 @@ curl -k https://localhost/api/app/authz/demo \
 | GET | `/forecasts/authors` | `/api/app/forecasts/authors` | Bearer + `module.history` |
 | GET | `/forecasts` | `/api/app/forecasts` | Bearer + `module.history` |
 | GET | `/forecasts/{id}` | `/api/app/forecasts/{id}` | Bearer + `module.history` |
+| POST | `/forecasts/{id}/erroneous` | `/api/app/forecasts/{id}/erroneous` | Bearer + `module.history` |
+| GET | `/users` | `/api/app/users` | Bearer + `module.requests` |
+| POST | `/requests` | `/api/app/requests` | Bearer + `module.requests` |
 | POST | `/predict` | `/api/app/predict` | Bearer |
 | GET | `/authz/demo` | `/api/app/authz/demo` | Bearer + `demo.access` |
 | GET | `/health` | нет (напрямую :8080) | нет |

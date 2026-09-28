@@ -7,4 +7,7 @@ public sealed record ForecastHistoryObject(
     double Latitude,
     double Longitude,
     IReadOnlyList<string> Statuses,
-    bool HasHighRisk);
+    bool? HasHighRisk,
+    IReadOnlyList<string> OwnStatuses,
+    int OwnChannelCount,
+    bool IsErroneous);

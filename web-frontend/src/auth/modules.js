@@ -6,9 +6,8 @@ export const MODULES = [
     anyPermissions: ['module.prediction', 'module.history'],
     label: 'Прогноз',
   },
-  { path: '/notifications', permission: 'module.notifications', label: 'Уведомления' },
+  { path: '/requests', permission: 'module.requests', label: 'Заявки' },
   { path: '/reports', permission: 'module.reports', label: 'Отчеты' },
-  { path: '/settings', permission: 'module.settings', label: 'Настройки' },
 ]
 
 function hasModule(set, module) {

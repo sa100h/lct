@@ -139,11 +139,15 @@
     background: #ff4d4f;
 }
 
+.map-marker-none {
+    background: #8c8c8c;
+}
+
 .map-marker-active {
     transform: scale(1.25);
 }
 
-.map-marker-active:not(.map-marker-ok):not(.map-marker-alert):not(.map-marker-risk) {
+.map-marker-active:not(.map-marker-ok):not(.map-marker-alert):not(.map-marker-risk):not(.map-marker-none) {
     background: #fa541c;
 }
 
@@ -167,6 +171,10 @@
 
 .map-tree-dot-alert {
     background: #ff4d4f;
+}
+
+.map-tree-dot-none {
+    background: #8c8c8c;
 }
 
 .map-tree-label {

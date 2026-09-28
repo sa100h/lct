@@ -12,9 +12,8 @@ const ORDER = [
   '/',
   '/map',
   '/prediction',
-  '/notifications',
+  '/requests',
   '/reports',
-  '/settings',
 ]
 
 test('MODULES order is canonical and has no history item', () => {
@@ -23,6 +22,13 @@ test('MODULES order is canonical and has no history item', () => {
     MODULES.some((m) => m.path === '/history'),
     false,
   )
+  assert.equal(MODULES.some((m) => m.path === '/settings' || m.path === '/notifications'), false)
+})
+
+test('requests module is labelled Заявки', () => {
+  const requests = MODULES.find((m) => m.path === '/requests')
+  assert.equal(requests.permission, 'module.requests')
+  assert.equal(requests.label, 'Заявки')
 })
 
 test('dashboard lives at / with module.dashboard', () => {
@@ -44,8 +50,8 @@ test('prediction menu item uses either forecast permission', () => {
 })
 
 test('getAllowedModules keeps canonical order', () => {
-  const allowed = getAllowedModules(['module.settings', 'module.dashboard', 'module.map'])
-  assert.deepEqual(allowed.map((m) => m.path), ['/', '/map', '/settings'])
+  const allowed = getAllowedModules(['module.requests', 'module.dashboard', 'module.map'])
+  assert.deepEqual(allowed.map((m) => m.path), ['/', '/map', '/requests'])
 })
 
 test('getAllowedModules shows Прогноз for either permission', () => {
@@ -64,7 +70,7 @@ test('getAllowedModules shows Прогноз for either permission', () => {
 })
 
 test('getFirstAllowedPath is first in MODULES not in caller order', () => {
-  assert.equal(getFirstAllowedPath(['module.settings', 'module.map']), '/map')
+  assert.equal(getFirstAllowedPath(['module.requests', 'module.map']), '/map')
   assert.equal(getFirstAllowedPath(['module.map', 'module.dashboard']), '/')
 })
 
@@ -75,10 +81,11 @@ test('empty permissions hide all modules and have no fallback path', () => {
 })
 
 test('isPathAllowed matches permission for path', () => {
-  const technician = ['module.map', 'module.prediction', 'module.history']
+  const technician = ['module.map', 'module.reports', 'module.requests']
   assert.equal(isPathAllowed(technician, '/'), false)
   assert.equal(isPathAllowed(technician, '/map'), true)
   assert.equal(isPathAllowed(technician, '/settings'), false)
+  assert.equal(isPathAllowed(technician, '/requests'), true)
   assert.equal(isPathAllowed(['module.dashboard'], '/'), true)
   assert.equal(isPathAllowed(['module.dashboard'], '/dashboard'), false)
 })

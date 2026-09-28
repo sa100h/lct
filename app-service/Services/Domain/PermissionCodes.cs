@@ -11,4 +11,5 @@ public static class PermissionCodes
     public const string ModuleNotifications = "module.notifications";
     public const string ModuleReports = "module.reports";
     public const string ModuleSettings = "module.settings";
+    public const string ModuleRequests = "module.requests";
 }

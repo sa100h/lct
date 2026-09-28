@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import { buildObjectTree } from '../prediction/buildObjectTree.js'
-import { ancestorKeys, mapOwnTone, rootExpandedKeys, toMapMarkers } from './mapTreeKeys.js'
+import { ancestorKeys, mapForecastTone, mapOwnTone, mergeExpandedKeys, rootExpandedKeys, scrollTreeToKey, toMapMarkers } from './mapTreeKeys.js'
 
 const objects = [
   { id: 5773, parentId: null, name: 'Район', longitude: 37.6, latitude: 55.7 },
@@ -51,4 +51,47 @@ test('toMapMarkers adds tone from own channels', () => {
     { id: 2, tone: 'ok' },
     { id: 3, tone: 'alert' },
   ])
+})
+
+test('mapForecastTone maps tri-state hasHighRisk', () => {
+  assert.equal(mapForecastTone(null), 'none')
+  assert.equal(mapForecastTone(undefined), 'none')
+  assert.equal(mapForecastTone(false), 'ok')
+  assert.equal(mapForecastTone(true), 'alert')
+})
+
+test('toMapMarkers uses toneOf when given', () => {
+  const list = [
+    { id: 1, longitude: 37, latitude: 55, hasHighRisk: null, ownChannelCount: 1, ownStatuses: ['Норма'] },
+  ]
+  const markers = toMapMarkers(list, (item) => mapForecastTone(item.hasHighRisk))
+  assert.equal(markers[0].tone, 'none')
+})
+
+test('mergeExpandedKeys adds ancestors and keeps current', () => {
+  const keys = mergeExpandedKeys(['5773'], objects, 5122)
+  assert.deepEqual([...keys].sort(), ['5', '5773'].sort())
+})
+
+test('scrollTreeToKey calls scrollTo and scrollIntoView', async () => {
+  let called
+  let scrolled = false
+  const tree = {
+    scrollTo(args) {
+      called = args
+    },
+    nativeElement: {
+      querySelector() {
+        return {
+          scrollIntoView() {
+            scrolled = true
+          },
+        }
+      },
+    },
+  }
+  scrollTreeToKey(tree, 5122)
+  await Promise.resolve()
+  assert.deepEqual(called, { key: '5122' })
+  assert.equal(scrolled, true)
 })

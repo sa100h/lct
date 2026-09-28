@@ -91,4 +91,32 @@ public sealed class NpgsqlDispatcherObjectRepository(string connectionString) : 
 
         return result;
     }
+
+    public async Task<IReadOnlyList<int>> GetSubtreeIdsAsync(
+        int rootId,
+        CancellationToken cancellationToken = default)
+    {
+        await using var connection = new NpgsqlConnection(connectionString);
+        await connection.OpenAsync(cancellationToken);
+        await using var command = new NpgsqlCommand("""
+            WITH RECURSIVE tree AS (
+                SELECT id FROM dispatcher_objects WHERE id = @id
+                UNION ALL
+                SELECT child.id
+                FROM dispatcher_objects child
+                JOIN tree parent ON child.parent_id = parent.id
+            )
+            SELECT id FROM tree ORDER BY id
+            """, connection);
+        command.Parameters.AddWithValue("id", rootId);
+
+        var result = new List<int>();
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+        while (await reader.ReadAsync(cancellationToken))
+        {
+            result.Add(reader.GetInt32(0));
+        }
+
+        return result;
+    }
 }

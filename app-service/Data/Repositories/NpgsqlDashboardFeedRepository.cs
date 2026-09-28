@@ -6,6 +6,25 @@ namespace AppService.Data.Repositories;
 
 public sealed class NpgsqlDashboardFeedRepository(string connectionString) : IDashboardFeedRepository
 {
+    public const string RecentRequestsSql = """
+        SELECT r.id,
+               r.request_description,
+               COALESCE(o.id, 0),
+               COALESCE(o.dispatcher_object_name, ''),
+               s.name
+        FROM requests r
+        JOIN request_statuses s ON s.id = r.request_status_id
+        LEFT JOIN dispatcher_objects o
+            ON o.id = CASE
+                WHEN r.dispatcher_objects_id IS NULL THEN NULL
+                WHEN jsonb_typeof(r.dispatcher_objects_id::jsonb) <> 'array' THEN NULL
+                WHEN jsonb_typeof(r.dispatcher_objects_id::jsonb -> 0) <> 'number' THEN NULL
+                ELSE (r.dispatcher_objects_id::jsonb ->> 0)::int
+            END
+        ORDER BY r.id
+        LIMIT 20
+        """;
+
     public async Task<IReadOnlyList<DashboardEventRow>> GetRecentEventsAsync(
         CancellationToken cancellationToken = default)
     {
@@ -68,14 +87,7 @@ public sealed class NpgsqlDashboardFeedRepository(string connectionString) : IDa
     {
         await using var connection = new NpgsqlConnection(connectionString);
         await connection.OpenAsync(cancellationToken);
-        await using var command = new NpgsqlCommand("""
-            SELECT r.id, r.request_description, o.id, o.dispatcher_object_name, s.name
-            FROM requests r
-            JOIN dispatcher_objects o ON o.id = r.dispatcher_object_id
-            JOIN request_statuses s ON s.id = r.request_status_id
-            ORDER BY r.id
-            LIMIT 20
-            """, connection);
+        await using var command = new NpgsqlCommand(RecentRequestsSql, connection);
 
         var result = new List<DashboardRequestRow>();
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);

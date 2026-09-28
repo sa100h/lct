@@ -90,7 +90,9 @@ public sealed class AuthDesignTests
             [
                 PermissionCodes.DemoAccess,
                 PermissionCodes.ModuleDashboard,
-                PermissionCodes.ModuleMap
+                PermissionCodes.ModuleMap,
+                PermissionCodes.ModuleRequests,
+                PermissionCodes.ModuleReports
             ],
             catalog.GetPermissions("technician"));
     }
@@ -104,23 +106,25 @@ public sealed class AuthDesignTests
             PermissionCodes.ModuleMap,
             PermissionCodes.ModulePrediction,
             PermissionCodes.ModuleHistory,
-            PermissionCodes.ModuleNotifications,
-            PermissionCodes.ModuleReports,
-            PermissionCodes.ModuleSettings
+            PermissionCodes.ModuleRequests,
+            PermissionCodes.ModuleReports
         ]),
         new RoleDefinition("technician", "CN=Technics,OU=Groups,DC=lct,DC=ru",
         [
             PermissionCodes.DemoAccess,
             PermissionCodes.ModuleDashboard,
-            PermissionCodes.ModuleMap
+            PermissionCodes.ModuleMap,
+            PermissionCodes.ModuleRequests,
+            PermissionCodes.ModuleReports
         ]),
         new RoleDefinition("dispatcher_ods", "CN=Dispetchers_ODS,OU=Groups,DC=lct,DC=ru",
         [
             PermissionCodes.DemoAccess,
             PermissionCodes.ModuleDashboard,
             PermissionCodes.ModuleMap,
+            PermissionCodes.ModulePrediction,
             PermissionCodes.ModuleHistory,
-            PermissionCodes.ModuleNotifications,
+            PermissionCodes.ModuleRequests,
             PermissionCodes.ModuleReports
         ]),
         new RoleDefinition("dispatcher_district", "CN=Dispetchers_rayon,OU=Groups,DC=lct,DC=ru",
@@ -128,7 +132,8 @@ public sealed class AuthDesignTests
             PermissionCodes.DemoAccess,
             PermissionCodes.ModuleMap,
             PermissionCodes.ModuleHistory,
-            PermissionCodes.ModuleNotifications
+            PermissionCodes.ModuleRequests,
+            PermissionCodes.ModuleReports
         ])
     ]);
 
@@ -166,6 +171,7 @@ public sealed class AuthDesignTests
             Assert.Contains(jwt.Claims, c => c.Type == JwtClaimNames.Permission && c.Value == PermissionCodes.DemoAccess);
             Assert.Contains(jwt.Claims, c => c.Type == JwtClaimNames.Permission && c.Value == PermissionCodes.ModuleMap);
             Assert.DoesNotContain(jwt.Claims, c => c.Type == JwtClaimNames.Permission && c.Value == PermissionCodes.ModuleSettings);
+            Assert.DoesNotContain(jwt.Claims, c => c.Type == JwtClaimNames.Permission && c.Value == PermissionCodes.ModuleNotifications);
             using var payload = JsonDocument.Parse(jwt.Payload.SerializeToJson());
             Assert.Equal(JsonValueKind.Array,
                 payload.RootElement.GetProperty(JwtClaimNames.Permission).ValueKind);
@@ -231,26 +237,26 @@ public sealed class AuthDesignTests
             [
                 PermissionCodes.DemoAccess, PermissionCodes.ModuleDashboard,
                 PermissionCodes.ModuleMap, PermissionCodes.ModulePrediction, PermissionCodes.ModuleHistory,
-                PermissionCodes.ModuleNotifications, PermissionCodes.ModuleReports, PermissionCodes.ModuleSettings
+                PermissionCodes.ModuleRequests, PermissionCodes.ModuleReports
             ],
             catalog.GetPermissions("admin"));
         Assert.Equal(
             [
                 PermissionCodes.DemoAccess, PermissionCodes.ModuleDashboard,
-                PermissionCodes.ModuleMap
+                PermissionCodes.ModuleMap, PermissionCodes.ModuleRequests, PermissionCodes.ModuleReports
             ],
             catalog.GetPermissions("technician"));
         Assert.Equal(
             [
                 PermissionCodes.DemoAccess, PermissionCodes.ModuleDashboard,
-                PermissionCodes.ModuleMap, PermissionCodes.ModuleHistory,
-                PermissionCodes.ModuleNotifications, PermissionCodes.ModuleReports
+                PermissionCodes.ModuleMap, PermissionCodes.ModulePrediction, PermissionCodes.ModuleHistory,
+                PermissionCodes.ModuleRequests, PermissionCodes.ModuleReports
             ],
             catalog.GetPermissions("dispatcher_ods"));
         Assert.Equal(
             [
                 PermissionCodes.DemoAccess, PermissionCodes.ModuleMap, PermissionCodes.ModuleHistory,
-                PermissionCodes.ModuleNotifications
+                PermissionCodes.ModuleRequests, PermissionCodes.ModuleReports
             ],
             catalog.GetPermissions("dispatcher_district"));
     }
@@ -267,16 +273,33 @@ public sealed class AuthDesignTests
 
         Assert.Equal(
             ["demo.access", "module.dashboard", "module.map", "module.prediction",
-             "module.history", "module.notifications", "module.reports", "module.settings"],
+             "module.history", "module.requests", "module.reports"],
             Read("admin"));
         Assert.Equal(
-            ["demo.access", "module.dashboard", "module.map"],
+            ["demo.access", "module.dashboard", "module.map", "module.requests", "module.reports"],
             Read("technician"));
         Assert.Equal(
-            ["demo.access", "module.dashboard", "module.map", "module.history", "module.notifications", "module.reports"],
+            ["demo.access", "module.dashboard", "module.map", "module.prediction", "module.history",
+             "module.requests", "module.reports"],
             Read("dispatcher_ods"));
         Assert.Equal(
-            ["demo.access", "module.map", "module.history", "module.notifications"],
+            ["demo.access", "module.map", "module.history", "module.requests", "module.reports"],
             Read("dispatcher_district"));
+    }
+
+    [Theory]
+    [InlineData("admin", "Admins")]
+    [InlineData("technician", "Technics")]
+    [InlineData("dispatcher_ods", "Dispetchers_ODS")]
+    [InlineData("dispatcher_district", "Dispetchers_rayon")]
+    public void ToDatabaseRoleName_MapsJwtRole(string jwtRole, string dbName)
+    {
+        Assert.Equal(dbName, RoleAccessCatalog.ToDatabaseRoleName(jwtRole));
+    }
+
+    [Fact]
+    public void ToDatabaseRoleName_RejectsUnknown()
+    {
+        Assert.Throws<ArgumentException>(() => RoleAccessCatalog.ToDatabaseRoleName("other"));
     }
 }

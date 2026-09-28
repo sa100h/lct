@@ -12,7 +12,8 @@ namespace AppService.Controllers;
 [Route("forecasts")]
 public sealed class ForecastsController(
     IForecastRunService forecasts,
-    IForecastHistoryQueryService history) : ControllerBase
+    IForecastHistoryQueryService history,
+    IForecastErroneousService erroneous) : ControllerBase
 {
     [HttpPost("run")]
     [Authorize(Policy = PermissionCodes.ModulePrediction)]
@@ -148,7 +149,40 @@ public sealed class ForecastsController(
                     item.Latitude,
                     item.Longitude,
                     item.Statuses,
-                    item.HasHighRisk))
+                    item.HasHighRisk,
+                    item.OwnStatuses,
+                    item.OwnChannelCount,
+                    item.IsErroneous))
                 .ToArray()));
+    }
+
+    [HttpPost("{id:guid}/erroneous")]
+    [Authorize(Policy = PermissionCodes.ModuleHistory)]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> MarkErroneous(
+        Guid id,
+        [FromBody] MarkForecastErroneousBody body,
+        CancellationToken cancellationToken)
+    {
+        if (!Guid.TryParse(User.FindFirst(JwtRegisteredClaimNames.Sub)?.Value, out var userId))
+        {
+            return Unauthorized();
+        }
+
+        try
+        {
+            await erroneous.MarkAsync(id, userId, body.DispatcherObjectId, cancellationToken);
+            return NoContent();
+        }
+        catch (KeyNotFoundException exception)
+        {
+            return NotFound(new { error = exception.Message });
+        }
+        catch (ArgumentException exception)
+        {
+            return BadRequest(new { error = exception.Message });
+        }
     }
 }

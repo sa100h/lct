@@ -39,8 +39,15 @@ public static class ServiceCollectionExtensions
             throw new InvalidOperationException("AuthCookie name and absolute path must be configured.");
         services.AddSingleton(cookie);
 
+        var forecast = configuration.GetSection(ForecastOptions.SectionName).Get<ForecastOptions>()
+            ?? new ForecastOptions();
+        services.AddSingleton(forecast);
+
         services.AddSingleton<IAuthRepository>(_ => new NpgsqlAuthRepository(connectionString));
         services.AddSingleton<IDispatcherObjectRepository>(_ => new NpgsqlDispatcherObjectRepository(connectionString));
+        services.AddSingleton<IUserRepository>(_ => new NpgsqlUserRepository(connectionString));
+        services.AddSingleton<IRequestRepository>(_ => new NpgsqlRequestRepository(connectionString));
+        services.AddSingleton<IForecastResultRepository>(_ => new NpgsqlForecastResultRepository(connectionString));
         services.AddSingleton<IDashboardFeedRepository>(_ => new NpgsqlDashboardFeedRepository(connectionString));
         services.AddSingleton<IForecastJournalRepository>(_ => new NpgsqlForecastJournalRepository(connectionString));
         services.AddSingleton<IForecastChannelRepository>(_ => new NpgsqlForecastChannelRepository(connectionString));
@@ -52,6 +59,9 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IForecastRunService, ForecastRunService>();
         services.AddScoped<IAutomaticForecastService, AutomaticForecastService>();
         services.AddScoped<IForecastHistoryQueryService, ForecastHistoryQueryService>();
+        services.AddScoped<IUserQueryService, UserQueryService>();
+        services.AddScoped<IRequestCommandService, RequestCommandService>();
+        services.AddScoped<IForecastErroneousService, ForecastErroneousService>();
         services.AddSingleton<PostgresMigrator>();
         services.AddHostedService<AppMigrationHostedService>();
         services.AddHostedService<ForecastHourlyWorker>();

@@ -2,9 +2,8 @@ import {
   DashboardOutlined,
   FullscreenOutlined,
   CloudOutlined,
-  NotificationOutlined,
   FileTextOutlined,
-  SettingOutlined,
+  FileDoneOutlined,
 } from '@ant-design/icons'
 import { Menu } from 'antd'
 import { useDispatch, useSelector } from 'react-redux'
@@ -16,9 +15,8 @@ const ICONS = {
   '/': <DashboardOutlined />,
   '/map': <FullscreenOutlined />,
   '/prediction': <CloudOutlined />,
-  '/notifications': <NotificationOutlined />,
+  '/requests': <FileDoneOutlined />,
   '/reports': <FileTextOutlined />,
-  '/settings': <SettingOutlined />,
 }
 
 export default function Sidebar() {

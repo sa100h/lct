@@ -6,19 +6,22 @@ namespace AppService.Data.Repositories;
 
 public sealed class NpgsqlAuthRepository(string connectionString) : IAuthRepository
 {
-    public async Task CreateLoginAsync(DirectoryIdentity identity, Guid familyId, Guid tokenId,
+    public async Task CreateLoginAsync(DirectoryIdentity identity, string jwtRole, Guid familyId, Guid tokenId,
         byte[] tokenHash, DateTimeOffset now, DateTimeOffset expiresAt, CancellationToken cancellationToken)
     {
         await using var connection = await OpenAsync(cancellationToken);
         await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
 
         await using (var user = new NpgsqlCommand("""
-            INSERT INTO users (id, login, is_active) VALUES (@id, @login, TRUE)
-            ON CONFLICT (id) DO UPDATE SET login = EXCLUDED.login, is_active = TRUE
+            INSERT INTO users (id, login, is_active, role_id)
+            VALUES (@id, @login, TRUE, (SELECT id FROM roles WHERE name = @roleName))
+            ON CONFLICT (id) DO UPDATE
+            SET login = EXCLUDED.login, is_active = TRUE, role_id = EXCLUDED.role_id
             """, connection, transaction))
         {
             user.Parameters.AddWithValue("id", identity.Id);
             user.Parameters.AddWithValue("login", identity.Login);
+            user.Parameters.AddWithValue("roleName", RoleAccessCatalog.ToDatabaseRoleName(jwtRole));
             await user.ExecuteNonQueryAsync(cancellationToken);
         }
 
@@ -57,7 +60,7 @@ public sealed class NpgsqlAuthRepository(string connectionString) : IAuthReposit
             reader.IsDBNull(5) ? null : reader.GetFieldValue<DateTimeOffset>(5));
     }
 
-    public async Task<RefreshRotationResult> RotateAsync(DirectoryIdentity identity,
+    public async Task<RefreshRotationResult> RotateAsync(DirectoryIdentity identity, string jwtRole,
         RefreshTokenRecord presented, byte[] tokenHash, byte[] nextHash, Guid nextTokenId,
         DateTimeOffset now, CancellationToken cancellationToken)
     {
@@ -102,9 +105,14 @@ public sealed class NpgsqlAuthRepository(string connectionString) : IAuthReposit
             return RefreshRotationResult.Invalid;
 
         await using (var user = new NpgsqlCommand(
-            "UPDATE users SET login = @login, is_active = TRUE WHERE id = @id", connection, transaction))
+            """
+            UPDATE users SET login = @login, is_active = TRUE,
+                role_id = (SELECT id FROM roles WHERE name = @roleName)
+            WHERE id = @id
+            """, connection, transaction))
         {
             user.Parameters.AddWithValue("login", identity.Login);
+            user.Parameters.AddWithValue("roleName", RoleAccessCatalog.ToDatabaseRoleName(jwtRole));
             user.Parameters.AddWithValue("id", identity.Id);
             await user.ExecuteNonQueryAsync(cancellationToken);
         }

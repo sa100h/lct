@@ -27,20 +27,17 @@
   margin: 0 0 8px;
 }
 
-.history-detail .map-marker-ok {
-  background: #52c41a;
+.history-detail-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 8px;
 }
 
-.history-detail .map-marker-risk {
-  background: #fadb14;
-}
-
-.history-detail .map-marker-ok.map-marker-active {
-  background: #52c41a;
-  transform: scale(1.25);
-}
-
-.history-detail .map-marker-risk.map-marker-active {
-  background: #fadb14;
-  transform: scale(1.25);
+.map-tree-erroneous {
+  margin-left: 6px;
+  font-size: 12px;
+  font-weight: 400;
+  color: #6b7280;
+  white-space: nowrap;
 }

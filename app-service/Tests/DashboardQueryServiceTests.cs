@@ -68,6 +68,11 @@ public sealed class DashboardQueryServiceTests
         public Task<IReadOnlyList<DispatcherObjectInfo>> GetAllWithDescendantStatusesAsync(
             CancellationToken cancellationToken = default)
             => Task.FromResult(result);
+
+        public Task<IReadOnlyList<int>> GetSubtreeIdsAsync(
+            int rootId,
+            CancellationToken cancellationToken = default)
+            => Task.FromResult<IReadOnlyList<int>>([]);
     }
 
     private sealed class StubDashboardFeedRepository : IDashboardFeedRepository
