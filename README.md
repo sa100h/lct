@@ -50,6 +50,7 @@ cd web-frontend && pnpm install --frozen-lockfile && pnpm run dev
 | `api-proxy/` | YARP-шлюз: маршруты `/api/app`, `/api/ml`, статика фронтенда | [→](api-proxy/README.md) |
 | `app-service/` | ASP.NET Core API: реестры, события, заявки | [→](app-service/README.md) |
 | `ml-service/` | FastAPI: ML-модели, ingest, предсказания | [→](ml-service/README.md) |
+| `ml-broker/` | Брокер: очередь признаков → batch `predict_all_batch` → `predictions` | [→](ml-broker/README.md) |
 | `test-event-feeder/` | FastAPI-эмулятор внешнего журнала событий | [→](test-event-feeder/README.md) |
 | `web-frontend/` | Vue 3 SPA: дашборд, карта, заявки | [→](web-frontend/README.md) |
 | `ad/` | Samba AD DC: учётки домена lct.ru (LDAPS) | [→](ad/README.md) |
