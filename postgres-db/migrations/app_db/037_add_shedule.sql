@@ -2,7 +2,7 @@
 CREATE TABLE service_types (
     id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
     name text not null,								-- 'Название'
-	is_non_working boolean not null,
+	is_non_working boolean not null
 );
 
 INSERT INTO service_types 	(name, is_non_working)
@@ -10,7 +10,7 @@ INSERT INTO service_types 	(name, is_non_working)
 							('ТР', true),
 							('ТО+ТР', true),
 							('Демонтаж', true),
-							('Проверка', false),
+							('Проверка', false);
 
 --		'План-график работ
 CREATE TABLE work_schedule (
@@ -30,6 +30,6 @@ CREATE TABLE work_schedule (
 		REFERENCES dispatcher_objects(id),
 	CONSTRAINT fk__work_schedule__service_types__service_type_id__id 
 		FOREIGN KEY (service_type_id) 
-		REFERENCES service_types(id),
+		REFERENCES service_types(id)
 );
 
