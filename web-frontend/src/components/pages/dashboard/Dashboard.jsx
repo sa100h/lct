@@ -1,33 +1,94 @@
-import { useEffect, useState } from 'react'
-import { Alert, Spin, Table, Tag } from 'antd'
-import { useSelector } from 'react-redux'
-import { Link, useNavigate } from 'react-router-dom'
+import { useEffect, useMemo, useState } from 'react'
+import { Alert, Spin } from 'antd'
+import ReactECharts from 'echarts-for-react'
 import { AuthHttpError } from '@/api/auth.js'
 import { getDashboard } from '@/api/dashboard.js'
-import { FORECAST_STATUS_LABEL, forecastStatusTagColor } from '@/components/pages/history/forecastStatusTag.js'
+import { FORECAST_STATUS_LABEL } from '@/components/pages/history/forecastStatusTag.js'
+import {
+  CHART_COLOR,
+  FORECAST_STATUS_RANGE,
+  OBJECT_TONE_RANGE,
+  REQUEST_STATUS_RANGE,
+  cartesianOption,
+  formatDayLabel,
+  hasCounts,
+  pieOption,
+} from './dashboardCharts.js'
 import './Dashboard.css'
 
 const EMPTY = 'Нет данных'
+const ECHARTS_STYLE = { height: 260 }
 
-function formatWhen(value) {
-  return new Date(value).toLocaleString('ru-RU')
-}
-
-function DashboardSection({ title, body, children }) {
+function DashboardSection({ title, children }) {
   return (
     <section className="dashboard-section">
       <h2>{title}</h2>
-      <div className={body ? 'dashboard-card' : 'dashboard-card dashboard-card--table'}>
-        {body ? <div className="dashboard-card-body">{children}</div> : children}
+      <div className="dashboard-card">
+        <div className="dashboard-card-body">{children}</div>
       </div>
     </section>
   )
 }
 
+function ChartOrEmpty({ empty, children }) {
+  if (empty) {
+    return <p className="dashboard-empty">{EMPTY}</p>
+  }
+  return <div className="dashboard-chart">{children}</div>
+}
+
+function Chart({ option }) {
+  return <ReactECharts option={option} style={ECHARTS_STYLE} notMerge lazyUpdate />
+}
+
+function DayBar({ rows, color }) {
+  const option = useMemo(
+    () =>
+      cartesianOption({
+        categories: rows.map((row) => formatDayLabel(row.date)),
+        values: rows.map((row) => row.count),
+        series: { type: 'bar', color },
+      }),
+    [color, rows],
+  )
+  return <Chart option={option} />
+}
+
+function DayLine({ rows }) {
+  const option = useMemo(
+    () =>
+      cartesianOption({
+        categories: rows.map((row) => formatDayLabel(row.date)),
+        values: rows.map((row) => row.count),
+        series: { type: 'line', color: CHART_COLOR.pending },
+      }),
+    [rows],
+  )
+  return <Chart option={option} />
+}
+
+function StatusPie({ items, colors, centerLabel }) {
+  const option = useMemo(
+    () => pieOption({ items, colors, centerLabel }),
+    [centerLabel, colors, items],
+  )
+  return <Chart option={option} />
+}
+
+function StatusBar({ items, colors }) {
+  const option = useMemo(
+    () =>
+      cartesianOption({
+        categories: items.map((item) => item.name),
+        values: items.map((item) => item.count),
+        series: { type: 'bar', colors },
+      }),
+    [colors, items],
+  )
+  return <Chart option={option} />
+}
+
 export default function Dashboard() {
-  const navigate = useNavigate()
-  const permissions = useSelector((state) => state.auth.permissions)
-  const canOpenHistory = permissions.includes('module.history')
   const [data, setData] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
@@ -65,6 +126,30 @@ export default function Dashboard() {
     }
   }, [])
 
+  const alarmsByDay = data?.alarmsByDay ?? []
+  const requestsByDay = data?.requestsByDay ?? []
+  const forecastsByStatus = data?.forecastsByStatus ?? []
+  const requestPieItems = useMemo(
+    () =>
+      (data?.requestsByStatus ?? []).map((row) => ({ name: row.status, count: row.count })),
+    [data?.requestsByStatus],
+  )
+  const objectPieItems = useMemo(
+    () => [
+      { name: 'В норме', count: data?.objects?.normal ?? 0 },
+      { name: 'Отклонения', count: data?.objects?.deviation ?? 0 },
+    ],
+    [data?.objects?.deviation, data?.objects?.normal],
+  )
+  const forecastBarItems = useMemo(
+    () =>
+      (data?.forecastsByStatus ?? []).map((row) => ({
+        name: FORECAST_STATUS_LABEL[row.status] ?? row.status,
+        count: row.count,
+      })),
+    [data?.forecastsByStatus],
+  )
+
   if (loading) {
     return <Spin className="dashboard-spin" />
   }
@@ -83,7 +168,7 @@ export default function Dashboard() {
     )
   }
 
-  const problems = data.objects.problemObjects ?? []
+  const requestsTotal = data.requestsTotal ?? 0
 
   return (
     <div className="dashboard-page">
@@ -103,77 +188,41 @@ export default function Dashboard() {
         </div>
       </div>
 
-      <DashboardSection title="Проблемные объекты" body>
-        {problems.length === 0 ? (
-          <p className="dashboard-empty">{EMPTY}</p>
-        ) : (
-          <ul className="dashboard-problems">
-            {problems.map((item) => (
-              <li key={item.id}>
-                <Link to={`/map?object=${item.id}`}>{item.name}</Link>
-                {item.statuses?.length > 0 ? ` — ${item.statuses.join(', ')}` : ''}
-              </li>
-            ))}
-          </ul>
-        )}
-      </DashboardSection>
+      <div className="dashboard-charts">
+        <DashboardSection title="Неисправности за 14 дней">
+          <ChartOrEmpty empty={!hasCounts(alarmsByDay)}>
+            <DayBar rows={alarmsByDay} color={CHART_COLOR.alarm} />
+          </ChartOrEmpty>
+        </DashboardSection>
 
-      <DashboardSection title="События">
-        <Table
-          pagination={false}
-          locale={{ emptyText: EMPTY }}
-          rowKey="id"
-          dataSource={data.events ?? []}
-          columns={[
-            {
-              title: 'Время',
-              dataIndex: 'occurredAt',
-              render: (value) => formatWhen(value),
-            },
-            { title: 'Объект', dataIndex: 'objectName' },
-            { title: 'Канал', dataIndex: 'channelName' },
-            {
-              title: 'Тревога',
-              dataIndex: 'isAlarm',
-              render: (value) => (value ? 'Тревога' : 'Нет'),
-            },
-            { title: 'Значение', dataIndex: 'value' },
-          ]}
-        />
-      </DashboardSection>
+        <DashboardSection title="Заявки">
+          <ChartOrEmpty empty={!hasCounts(data.requestsByStatus ?? [])}>
+            <StatusPie
+              items={requestPieItems}
+              colors={REQUEST_STATUS_RANGE}
+              centerLabel={`Всего: ${requestsTotal}`}
+            />
+          </ChartOrEmpty>
+        </DashboardSection>
 
-      <DashboardSection title="Прогнозы">
-        <Table
-          pagination={false}
-          locale={{ emptyText: EMPTY }}
-          rowKey="id"
-          dataSource={data.forecasts ?? []}
-          onRow={(record) =>
-            canOpenHistory
-              ? {
-                  onClick: () => navigate(`/history/${record.id}`),
-                  className: 'dashboard-forecast-row',
-                }
-              : undefined
-          }
-          columns={[
-            {
-              title: 'Создан',
-              dataIndex: 'createdAt',
-              render: (value) => formatWhen(value),
-            },
-            {
-              title: 'Статус',
-              dataIndex: 'status',
-              render: (value) => (
-                <Tag color={forecastStatusTagColor(value)}>
-                  {FORECAST_STATUS_LABEL[value] ?? value}
-                </Tag>
-              ),
-            },
-          ]}
-        />
-      </DashboardSection>
+        <DashboardSection title="Заявки по дням">
+          <ChartOrEmpty empty={!hasCounts(requestsByDay)}>
+            <DayLine rows={requestsByDay} />
+          </ChartOrEmpty>
+        </DashboardSection>
+
+        <DashboardSection title="Объекты">
+          <ChartOrEmpty empty={data.objects.total === 0}>
+            <StatusPie items={objectPieItems} colors={OBJECT_TONE_RANGE} />
+          </ChartOrEmpty>
+        </DashboardSection>
+
+        <DashboardSection title="Прогнозы за 14 дней">
+          <ChartOrEmpty empty={!hasCounts(forecastsByStatus)}>
+            <StatusBar items={forecastBarItems} colors={FORECAST_STATUS_RANGE} />
+          </ChartOrEmpty>
+        </DashboardSection>
+      </div>
     </div>
   )
 }

@@ -48,6 +48,12 @@
   color: #6b7280;
 }
 
+.dashboard-charts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: 16px;
+}
+
 .dashboard-section {
   display: flex;
   flex-direction: column;
@@ -74,17 +80,8 @@
   padding: 16px 20px;
 }
 
-.dashboard-card--table .ant-table-wrapper {
-  width: 100%;
-}
-
-.dashboard-card--table .ant-table {
-  background: transparent;
-}
-
-.dashboard-card--table .ant-table-container,
-.dashboard-card--table .ant-table-content {
-  border-radius: 0;
+.dashboard-chart {
+  min-height: 260px;
 }
 
 .dashboard-empty {
@@ -93,21 +90,7 @@
   color: #6b7280;
 }
 
-.dashboard-problems {
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-.dashboard-problems li + li {
-  margin-top: 10px;
-}
-
 .dashboard-spin {
   display: block;
   margin: 32px auto;
-}
-
-.dashboard-forecast-row {
-  cursor: pointer;
 }

@@ -24,21 +24,18 @@ public sealed class DashboardController(IDashboardQueryService dashboard) : Cont
             new DashboardObjectsResponse(
                 snapshot.Objects.Total,
                 snapshot.Objects.Normal,
-                snapshot.Objects.Deviation,
-                snapshot.Objects.ProblemObjects
-                    .Select(item => new DashboardProblemObjectResponse(item.Id, item.Name, item.Statuses))
-                    .ToArray()),
-            snapshot.Events
-                .Select(item => new DashboardEventResponse(
-                    item.Id,
-                    item.OccurredAt,
-                    item.ObjectId,
-                    item.ObjectName,
-                    item.ChannelName,
-                    item.IsAlarm,
-                    item.Value))
+                snapshot.Objects.Deviation),
+            snapshot.AlarmsByDay
+                .Select(item => new DashboardDayCountResponse(item.Date, item.Count))
                 .ToArray(),
-            snapshot.Forecasts
-                .Select(item => new DashboardForecastResponse(item.Id, item.CreatedAt, item.Status))
+            snapshot.RequestsTotal,
+            snapshot.RequestsByStatus
+                .Select(item => new DashboardStatusCountResponse(item.Status, item.Count))
+                .ToArray(),
+            snapshot.RequestsByDay
+                .Select(item => new DashboardDayCountResponse(item.Date, item.Count))
+                .ToArray(),
+            snapshot.ForecastsByStatus
+                .Select(item => new DashboardStatusCountResponse(item.Status, item.Count))
                 .ToArray());
 }

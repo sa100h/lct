@@ -6,69 +6,100 @@ namespace AppService.Data.Repositories;
 
 public sealed class NpgsqlDashboardFeedRepository(string connectionString) : IDashboardFeedRepository
 {
-    public async Task<IReadOnlyList<DashboardEventRow>> GetRecentEventsAsync(
+    public async Task<IReadOnlyDictionary<DateOnly, int>> GetAlarmCountsByDayAsync(
+        DateTimeOffset fromInclusive,
+        DateTimeOffset toExclusive,
         CancellationToken cancellationToken = default)
-    {
-        await using var connection = new NpgsqlConnection(connectionString);
-        await connection.OpenAsync(cancellationToken);
-        await using var command = new NpgsqlCommand("""
-            SELECT e.id, e.event_datetime, o.id, o.dispatcher_object_name, c.sensor_name, e.is_alarm, e.sensor_value
+        => await ReadDayCountsAsync("""
+            SELECT (e.event_datetime AT TIME ZONE 'UTC')::date, COUNT(*)::int
             FROM events_log e
-            JOIN sensor_channels c ON c.id = e.sensor_channel_id
-            JOIN dispatcher_objects o ON o.id = c.dispatcher_object_id
-            ORDER BY e.event_datetime DESC, e.id DESC
-            LIMIT 20
-            """, connection);
+            WHERE e.is_alarm AND e.event_datetime >= @from AND e.event_datetime < @to
+            GROUP BY 1
+            """, fromInclusive, toExclusive, cancellationToken);
 
-        var result = new List<DashboardEventRow>();
-        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
-        while (await reader.ReadAsync(cancellationToken))
-        {
-            result.Add(new DashboardEventRow(
-                reader.GetInt64(0),
-                ReadUtc(reader, 1),
-                reader.GetInt32(2),
-                reader.GetString(3),
-                reader.GetString(4),
-                reader.GetBoolean(5),
-                reader.IsDBNull(6) ? null : reader.GetString(6)));
-        }
-
-        return result;
-    }
-
-    public async Task<IReadOnlyList<DashboardForecastRow>> GetRecentForecastsAsync(
+    public async Task<IReadOnlyList<DashboardStatusCount>> GetRequestCountsByStatusAsync(
         CancellationToken cancellationToken = default)
     {
         await using var connection = new NpgsqlConnection(connectionString);
         await connection.OpenAsync(cancellationToken);
         await using var command = new NpgsqlCommand("""
-            SELECT id, creation_time, start_composition_time, end_composition_time
-            FROM forecast_journal
-            ORDER BY creation_time DESC
-            LIMIT 10
+            SELECT s.name, COUNT(r.id)::int
+            FROM request_statuses s
+            LEFT JOIN requests r ON r.request_status_id = s.id
+            GROUP BY s.name
             """, connection);
+        return await ReadStatusCountsAsync(command, cancellationToken);
+    }
 
-        var result = new List<DashboardForecastRow>();
+    public async Task<IReadOnlyDictionary<DateOnly, int>> GetRequestCountsByDayAsync(
+        DateTimeOffset fromInclusive,
+        DateTimeOffset toExclusive,
+        CancellationToken cancellationToken = default)
+        => await ReadDayCountsAsync("""
+            SELECT (r.created_at AT TIME ZONE 'UTC')::date, COUNT(*)::int
+            FROM requests r
+            WHERE r.created_at >= @from AND r.created_at < @to
+            GROUP BY 1
+            """, fromInclusive, toExclusive, cancellationToken);
+
+    public async Task<IReadOnlyList<DashboardStatusCount>> GetForecastCountsByStatusAsync(
+        DateTimeOffset fromInclusive,
+        DateTimeOffset toExclusive,
+        CancellationToken cancellationToken = default)
+    {
+        await using var connection = new NpgsqlConnection(connectionString);
+        await connection.OpenAsync(cancellationToken);
+        await using var command = new NpgsqlCommand("""
+            SELECT CASE
+                WHEN j.end_composition_time IS NOT NULL THEN 'done'
+                WHEN j.start_composition_time IS NOT NULL THEN 'running'
+                ELSE 'pending'
+            END, COUNT(*)::int
+            FROM forecast_journal j
+            WHERE j.creation_time >= @from AND j.creation_time < @to
+            GROUP BY 1
+            """, connection);
+        AddRange(command, fromInclusive, toExclusive);
+        return await ReadStatusCountsAsync(command, cancellationToken);
+    }
+
+    private async Task<IReadOnlyDictionary<DateOnly, int>> ReadDayCountsAsync(
+        string sql,
+        DateTimeOffset fromInclusive,
+        DateTimeOffset toExclusive,
+        CancellationToken cancellationToken)
+    {
+        await using var connection = new NpgsqlConnection(connectionString);
+        await connection.OpenAsync(cancellationToken);
+        await using var command = new NpgsqlCommand(sql, connection);
+        AddRange(command, fromInclusive, toExclusive);
+        var result = new Dictionary<DateOnly, int>();
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
         while (await reader.ReadAsync(cancellationToken))
         {
-            result.Add(new DashboardForecastRow(
-                reader.GetGuid(0),
-                ReadUtc(reader, 1),
-                ReadUtcOrNull(reader, 2),
-                ReadUtcOrNull(reader, 3)));
+            result[DateOnly.FromDateTime(reader.GetDateTime(0))] = reader.GetInt32(1);
         }
 
         return result;
     }
 
-    private static DateTimeOffset ReadUtc(NpgsqlDataReader reader, int ordinal)
+    private static async Task<IReadOnlyList<DashboardStatusCount>> ReadStatusCountsAsync(
+        NpgsqlCommand command,
+        CancellationToken cancellationToken)
     {
-        var value = reader.GetDateTime(ordinal);
-        return new DateTimeOffset(DateTime.SpecifyKind(value, DateTimeKind.Utc));
+        var result = new List<DashboardStatusCount>();
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+        while (await reader.ReadAsync(cancellationToken))
+        {
+            result.Add(new DashboardStatusCount(reader.GetString(0), reader.GetInt32(1)));
+        }
+
+        return result;
     }
 
-    private static DateTimeOffset? ReadUtcOrNull(NpgsqlDataReader reader, int ordinal)
-        => reader.IsDBNull(ordinal) ? null : ReadUtc(reader, ordinal);
+    private static void AddRange(NpgsqlCommand command, DateTimeOffset fromInclusive, DateTimeOffset toExclusive)
+    {
+        command.Parameters.AddWithValue("from", fromInclusive);
+        command.Parameters.AddWithValue("to", toExclusive);
+    }
 }
