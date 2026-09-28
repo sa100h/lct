@@ -1,14 +1,20 @@
 using System.Text.Json;
+using AppService.Models;
 
 namespace AppService.Services.Domain;
 
 public static class ForecastRisk
 {
+    private static readonly ForecastRiskParse Empty = new(null, []);
+
     public static bool? FromDescription(string? json, double threshold)
+        => Parse(json, threshold).HighRisk;
+
+    public static ForecastRiskParse Parse(string? json, double threshold)
     {
         if (string.IsNullOrWhiteSpace(json))
         {
-            return null;
+            return Empty;
         }
 
         JsonDocument document;
@@ -18,7 +24,7 @@ public static class ForecastRisk
         }
         catch (JsonException)
         {
-            return null;
+            return Empty;
         }
 
         using (document)
@@ -26,10 +32,10 @@ public static class ForecastRisk
             if (!document.RootElement.TryGetProperty("channels", out var channels)
                 || channels.ValueKind != JsonValueKind.Object)
             {
-                return null;
+                return Empty;
             }
 
-            var found = false;
+            List<ForecastChannelValue> values = [];
             var anyHigh = false;
             foreach (var subject in channels.EnumerateObject())
             {
@@ -48,7 +54,7 @@ public static class ForecastRisk
                         continue;
                     }
 
-                    found = true;
+                    values.Add(new ForecastChannelValue(subject.Name, category.Name, number));
                     if (number >= threshold)
                     {
                         anyHigh = true;
@@ -56,12 +62,12 @@ public static class ForecastRisk
                 }
             }
 
-            if (!found)
+            if (values.Count == 0)
             {
-                return null;
+                return Empty;
             }
 
-            return anyHigh;
+            return new ForecastRiskParse(anyHigh, values);
         }
     }
 }

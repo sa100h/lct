@@ -27,6 +27,11 @@
   margin: 0 0 8px;
 }
 
+.history-detail-modal ul {
+  margin: 0;
+  padding-left: 1.25em;
+}
+
 .history-detail-actions {
   display: flex;
   gap: 8px;

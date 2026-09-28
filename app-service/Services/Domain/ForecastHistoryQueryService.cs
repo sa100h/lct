@@ -77,10 +77,10 @@ public sealed class ForecastHistoryQueryService(
             .Select(item =>
             {
                 rows.TryGetValue(item.Id, out var row);
+                var hasResult = row is not null;
+                var parsed = ForecastRisk.Parse(row?.Description, forecast.RiskThreshold);
                 var erroneous = row?.IsErroneous == true;
-                var risk = erroneous
-                    ? false
-                    : ForecastRisk.FromDescription(row?.Description, forecast.RiskThreshold);
+                var risk = erroneous ? false : parsed.HighRisk;
                 return new ForecastHistoryObject(
                     item.Id,
                     item.ParentId,
@@ -91,7 +91,9 @@ public sealed class ForecastHistoryQueryService(
                     risk,
                     item.OwnStatuses,
                     item.OwnChannelCount,
-                    erroneous);
+                    erroneous,
+                    hasResult,
+                    parsed.Values);
             })
             .ToArray();
 

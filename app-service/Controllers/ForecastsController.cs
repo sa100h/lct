@@ -152,7 +152,14 @@ public sealed class ForecastsController(
                     item.HasHighRisk,
                     item.OwnStatuses,
                     item.OwnChannelCount,
-                    item.IsErroneous))
+                    item.IsErroneous,
+                    item.HasResult,
+                    item.ForecastValues
+                        .Select(value => new ForecastChannelValueResponse(
+                            value.ChannelId,
+                            value.Category,
+                            value.Value))
+                        .ToArray()))
                 .ToArray()));
     }
 

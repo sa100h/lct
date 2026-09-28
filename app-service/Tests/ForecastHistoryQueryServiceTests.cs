@@ -73,6 +73,8 @@ public sealed class ForecastHistoryQueryServiceTests
         Assert.Equal(2, obj.Id);
         Assert.Null(obj.HasHighRisk);
         Assert.False(obj.IsErroneous);
+        Assert.False(obj.HasResult);
+        Assert.Empty(obj.ForecastValues);
         Assert.Equal("pending", detail.Status);
     }
 
@@ -159,6 +161,13 @@ public sealed class ForecastHistoryQueryServiceTests
         var detail = await service.GetByIdAsync(id, TestContext.Current.CancellationToken);
 
         Assert.Equal([true, false, null], detail!.Objects.Select(item => item.HasHighRisk));
+        Assert.Equal([true, true, true], detail.Objects.Select(item => item.HasResult));
+        var high = Assert.Single(detail.Objects[0].ForecastValues);
+        Assert.Equal("a", high.ChannelId);
+        Assert.Equal("fire-risk", high.Category);
+        Assert.Equal(0.9, high.Value);
+        Assert.Single(detail.Objects[1].ForecastValues);
+        Assert.Empty(detail.Objects[2].ForecastValues);
     }
 
     [Fact]
@@ -184,6 +193,32 @@ public sealed class ForecastHistoryQueryServiceTests
         var obj = Assert.Single(detail!.Objects);
         Assert.True(obj.IsErroneous);
         Assert.False(obj.HasHighRisk);
+        Assert.True(obj.HasResult);
+        Assert.Equal(0.9, Assert.Single(obj.ForecastValues).Value);
+    }
+
+    [Fact]
+    public async Task GetByIdAsync_UnpredictableDescription_IsResultWithoutRisk()
+    {
+        var id = Guid.NewGuid();
+        var journal = new StubForecastJournalRepository
+        {
+            Header = new ForecastHistoryHeader(id, DateTimeOffset.UtcNow, "admin.test", null, null, [1]),
+        };
+        var rows = new Dictionary<int, ForecastJournalResult>
+        {
+            [1] = new("""{"channels":{"x":{"fire-risk":{"status_code":"unpredictable"}}}}""", false),
+        };
+        var service = CreateService(
+            journal,
+            new StubDispatcherObjectRepository([Object(1)]),
+            rows);
+
+        var detail = await service.GetByIdAsync(id, TestContext.Current.CancellationToken);
+        var obj = Assert.Single(detail!.Objects);
+        Assert.True(obj.HasResult);
+        Assert.Null(obj.HasHighRisk);
+        Assert.Empty(obj.ForecastValues);
     }
 
     private static ForecastHistoryQueryService CreateService(

@@ -371,12 +371,20 @@ Query:
 
 ### `GET /forecasts/{id}`
 
-Нужны JWT и permission `module.history`. Деталь запуска: объекты с координатами и
-`hasHighRisk` (`null` — нет прогноза, `false` — в норме, `true` — отрицательный).
-Порог — `Forecast:RiskThreshold` в appsettings (env `Forecast__RiskThreshold`),
-по умолчанию `0.5`; красный, если хотя бы одно `channels.*.*.value` ≥ порога.
-`isErroneous` — `forecast_results.is_erroneous`; нет строки → `false`. Если
-`isErroneous` true, `hasHighRisk` всегда `false`. Поля в JSON не опускаются.
+Нужны JWT и permission `module.history`. Деталь запуска: объекты с координатами,
+оценкой и числами каналов.
+
+- `hasResult` — есть строка `forecast_results` для объекта.
+- `forecastValues` — только каналы с числом `value`. `unpredictable` и записи без
+  числа не входят.
+- `hasHighRisk`: без строки или без чисел → `null`; иначе `true`, если хотя бы
+  одно `value` ≥ `Forecast:RiskThreshold` (по умолчанию `0.5`, env
+  `Forecast__RiskThreshold`), иначе `false`.
+- `isErroneous` — `forecast_results.is_erroneous`; нет строки → `false`. Если
+  `isErroneous` true, `hasHighRisk` всегда `false`. `forecastValues` всё равно
+  отдаём, если есть числа.
+
+Поля в JSON не опускаются.
 
 Список объектов строится по каналам из `forecast_channels` и включает их объекты-предки,
 чтобы сохранить дерево истории.
@@ -400,7 +408,9 @@ Query:
       "hasHighRisk": null,
       "ownStatuses": ["Норма"],
       "ownChannelCount": 3,
-      "isErroneous": false
+      "isErroneous": false,
+      "hasResult": false,
+      "forecastValues": []
     },
     {
       "id": 5122,
@@ -412,7 +422,11 @@ Query:
       "hasHighRisk": false,
       "ownStatuses": ["Норма"],
       "ownChannelCount": 1,
-      "isErroneous": true
+      "isErroneous": true,
+      "hasResult": true,
+      "forecastValues": [
+        { "channelId": "120578", "category": "fire-risk", "value": 0.81 }
+      ]
     }
   ]
 }

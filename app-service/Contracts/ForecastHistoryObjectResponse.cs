@@ -10,4 +10,6 @@ public sealed record ForecastHistoryObjectResponse(
     bool? HasHighRisk,
     IReadOnlyList<string> OwnStatuses,
     int OwnChannelCount,
-    bool IsErroneous);
+    bool IsErroneous,
+    bool HasResult,
+    IReadOnlyList<ForecastChannelValueResponse> ForecastValues);

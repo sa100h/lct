@@ -22,6 +22,7 @@ import { listUsersByRole } from '@/api/users.js'
 import { buildObjectTree } from '@/components/pages/prediction/buildObjectTree.js'
 import { mapForecastTone, mergeExpandedKeys, rootExpandedKeys, scrollTreeToKey, toMapMarkers } from '@/components/pages/map/mapTreeKeys.js'
 import { formatObjectCount } from '@/components/objectTree/formatObjectCount.js'
+import { forecastCategoryLabel, forecastResultHeadline } from '@/components/pages/history/forecastResultCopy.js'
 import YandexMap from '@/components/pages/map/YandexMap.jsx'
 import '@/components/pages/map/Map.css'
 import './HistoryDetail.css'
@@ -312,7 +313,16 @@ export default function HistoryDetail() {
                 : 'нет'}
             </p>
             {modalObject.isErroneous ? <p>Помечен как ошибочный</p> : null}
-            <p>Результатов прогноза пока нет</p>
+            <p>{forecastResultHeadline(modalObject)}</p>
+            {(modalObject.forecastValues?.length ?? 0) > 0 ? (
+              <ul>
+                {modalObject.forecastValues.map((item) => (
+                  <li key={`${item.channelId}-${item.category}`}>
+                    {item.channelId} — {forecastCategoryLabel(item.category)}: {item.value}
+                  </li>
+                ))}
+              </ul>
+            ) : null}
           </div>
         ) : null}
       </Modal>
