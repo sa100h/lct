@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import asyncio
+import time
 
 import httpx
 
@@ -11,6 +12,11 @@ from .forecast_flow import PredictChunk, build_chunks
 from .log import get_logger
 
 log = get_logger(__name__)
+
+# A batch call that exceeds PREDICT_TIMEOUT_SECONDS is assumed to be too big
+# rather than broken: it is split in half and retried, down to this floor.
+# Below the floor a timeout is a real service problem -> normal retry path.
+MIN_SPLIT_SUBJECTS = 25
 
 
 class QueueWorker:
@@ -96,17 +102,26 @@ class QueueWorker:
         # Rows per claim: every claimed subject needs one row per category.
         return max(1, self._cfg.forecast_batch_chunk * len(self._cfg.categories))
 
-    async def _process_chunk(self, chunk: PredictChunk) -> int:
-        """One POST /predict_all_batch for the whole chunk."""
+    async def _process_chunk(self, chunk: PredictChunk, depth: int = 0) -> int:
+        """One POST /predict_all_batch for the whole chunk.
+
+        A timeout does NOT burn an attempt: an oversized chunk is split in half
+        and both halves are retried (recursively, down to MIN_SPLIT_SUBJECTS).
+        That keeps a too-large FORECAST_BATCH_CHUNK from stalling a whole
+        journal on a service that is merely slower than the timeout.
+        """
         payload = {
             "subject_ids": chunk.subjects,
             "current_features": chunk.features,
             "horizon_hours": self._cfg.horizon_hours,
             "as_of": chunk.as_of.isoformat(),
         }
+        started = time.monotonic()
         try:
             response = await self._client.post(
-                f"{self._cfg.ml_base_url}/predict_all_batch", json=payload
+                f"{self._cfg.ml_base_url}/predict_all_batch",
+                json=payload,
+                timeout=self._cfg.predict_timeout_seconds,
             )
             response.raise_for_status()
             body = response.json()
@@ -114,7 +129,26 @@ class QueueWorker:
             error = f"HTTP {exc.response.status_code}: {exc.response.text[:300]}"
             log.warning("predict_all_batch http error", size=len(chunk.rows), error=error[:120])
             return await self._fail_chunk(chunk, error, retryable=500 <= exc.response.status_code < 600)
-        except (httpx.TimeoutException, httpx.TransportError) as exc:
+        except httpx.TimeoutException as exc:
+            elapsed = time.monotonic() - started
+            error = f"{type(exc).__name__}: {exc}"
+            if len(chunk.subjects) > MIN_SPLIT_SUBJECTS:
+                log.warning(
+                    "predict_all_batch timed out, splitting chunk",
+                    subjects=len(chunk.subjects),
+                    seconds=round(elapsed, 1),
+                    timeout=self._cfg.predict_timeout_seconds,
+                    depth=depth,
+                )
+                return await self._split_chunk(chunk, depth)
+            log.warning(
+                "predict_all_batch timeout at floor size",
+                size=len(chunk.rows),
+                seconds=round(elapsed, 1),
+                error=error[:120],
+            )
+            return await self._fail_chunk(chunk, error, retryable=True)
+        except httpx.TransportError as exc:
             error = f"{type(exc).__name__}: {exc}"
             log.warning("predict_all_batch transport error", size=len(chunk.rows), error=error[:120])
             return await self._fail_chunk(chunk, error, retryable=True)
@@ -123,6 +157,25 @@ class QueueWorker:
         done = await self._spread(chunk, subject_results)
         self._stats["done"] += done
         self._stats["batch_calls"] += 1
+        log.info(
+            "predict_all_batch ok",
+            subjects=len(chunk.subjects),
+            rows=len(chunk.rows),
+            seconds=round(time.monotonic() - started, 1),
+        )
+        return done
+
+    async def _split_chunk(self, chunk: PredictChunk, depth: int) -> int:
+        """Halve an oversized chunk and process the halves (no attempt penalty)."""
+        half = max(1, len(chunk.subjects) // 2)
+        done = 0
+        for part in build_chunks(chunk.rows, half):
+            if len(part.subjects) >= len(chunk.subjects):  # cannot shrink further
+                done += await self._fail_chunk(
+                    part, f"timeout with {len(part.subjects)} subjects after split", retryable=True
+                )
+                continue
+            done += await self._process_chunk(part, depth + 1)
         return done
 
     async def _spread(self, chunk: PredictChunk, subject_results: list[dict]) -> int:

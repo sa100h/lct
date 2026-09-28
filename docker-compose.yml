@@ -222,6 +222,7 @@ services:
       DB_DSN: host=postgres port=5432 dbname=app_db user=app_service password=${APP_DB_PASSWORD}
       ML_BASE_URL: http://ml-service:8000
       FORECAST_BATCH_CHUNK: ${FORECAST_BATCH_CHUNK:-300}
+      PREDICT_TIMEOUT_SECONDS: ${PREDICT_TIMEOUT_SECONDS:-600}
     read_only: true
     tmpfs: ["/tmp:size=50M"]
     cap_drop: [ALL]

@@ -98,6 +98,14 @@ class Config:
     http_timeout_seconds: float = field(
         default_factory=lambda: float(os.environ.get("HTTP_TIMEOUT_SECONDS", "30"))
     )
+    # /predict_all_batch is inherently long: ONE call scores every subject of a
+    # chunk across all four categories. The generic 30s HTTP timeout (health,
+    # retrain, callbacks) is far too tight for that — a chunk of
+    # FORECAST_BATCH_CHUNK=1000 subjects needs minutes on real history, so the
+    # batch call gets its own, generous budget.
+    predict_timeout_seconds: float = field(
+        default_factory=lambda: float(os.environ.get("PREDICT_TIMEOUT_SECONDS", "600"))
+    )
     health_host: str = field(default_factory=lambda: os.environ.get("HEALTH_HOST", "0.0.0.0"))
     health_port: int = field(default_factory=lambda: _env_int("HEALTH_PORT", 8080))
     horizon_hours: int = field(default_factory=lambda: _env_int("HORIZON_HOURS", 24))

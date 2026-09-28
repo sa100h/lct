@@ -21,6 +21,7 @@ import pytest
 
 from app.config import Config
 from app.db import QueueRow, _as_features
+from app.forecast_flow import build_chunks
 from app.queue_worker import QueueWorker
 
 T = datetime(2026, 9, 28, 12, 0, tzinfo=timezone.utc)
@@ -289,6 +290,66 @@ def test_transport_error_chunk_retried(cfg):
 
     assert [r[0] for r in db.retried] == [1, 2]
     assert all("ConnectError" in r[2] for r in db.retried)
+    assert db.done == [] and db.failed == []
+
+
+def test_read_timeout_splits_chunk_until_it_fits(cfg):
+    """An oversized chunk that times out is halved and retried, not penalised.
+
+    The ml-service here answers only small payloads (<= 20 subjects); the
+    60-subject chunk times out until the split brings it under that. No row
+    may burn an attempt and everything must end up done.
+    """
+    cats = ("sensor-failure", "fire-risk", "unauthorized-access", "infrastructure-wear")
+    n_subjects = 60
+    rows = [
+        _row(s * len(cats) + c + 1, f"ch-{s}", cat)
+        for s in range(n_subjects)
+        for c, cat in enumerate(cats)
+    ]
+    cfg = Config(
+        max_attempts=3,
+        retry_backoff_seconds=1.0,
+        horizon_hours=24,
+        forecast_batch_chunk=n_subjects,
+        predict_timeout_seconds=1.0,
+    )
+    db = FakeDB(rows=rows)
+    sizes: list[int] = []
+
+    async def fake_post(url, json=None, timeout=None):
+        subjects = list((json or {}).get("subject_ids", []))
+        sizes.append(len(subjects))
+        assert timeout == 1.0, "batch call must use predict_timeout_seconds"
+        if len(subjects) > 20:
+            raise httpx.ReadTimeout("read timed out")
+        body = _batch_response({s: [_prediction(s, c) for c in cats] for s in subjects})
+        return httpx.Response(200, request=httpx.Request("POST", url), json=body)
+
+    client = httpx.AsyncClient()
+    client.post = fake_post  # type: ignore[assignment]
+    worker = _worker(cfg, db, client)
+
+    handled = asyncio.run(worker._process_chunk(build_chunks(rows, n_subjects)[0]))
+
+    assert handled == len(rows)
+    assert len(db.done) == len(rows)
+    assert db.retried == [] and db.failed == []
+    assert sizes[0] == n_subjects          # oversized first attempt
+    assert max(sizes) == n_subjects        # never grows
+    assert min(sizes) <= 20                # eventually fits the service
+    assert sizes.count(n_subjects) == 1    # split only once per level
+
+
+def test_timeout_at_floor_size_uses_normal_retry(cfg):
+    """Below MIN_SPLIT_SUBJECTS a timeout is a real service problem -> retry."""
+    db = FakeDB(rows=[_row(1, "ch-1", "fire-risk"), _row(2, "ch-2", "fire-risk")])
+    worker = _worker(cfg, db, _client(httpx.ReadTimeout("read timed out")))
+
+    asyncio.run(worker._drain_once())
+
+    assert [r[0] for r in db.retried] == [1, 2]
+    assert all("ReadTimeout" in r[2] for r in db.retried)
     assert db.done == [] and db.failed == []
 
 
