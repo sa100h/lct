@@ -18,6 +18,18 @@ docs/superpowers/
 ml-service/.venv/
 ml-service/models/*
 !ml-service/models/.gitkeep
+# the four serving artifacts (model.lgb + meta.json) ARE tracked: a clone and the
+# image build both need them. Experiment output stays out.
+!ml-service/models/sensor-failure
+!ml-service/models/sensor-failure/**
+!ml-service/models/fire-risk
+!ml-service/models/fire-risk/**
+!ml-service/models/unauthorized-access
+!ml-service/models/unauthorized-access/**
+!ml-service/models/infrastructure-wear
+!ml-service/models/infrastructure-wear/**
+ml-service/models/*/meta.nolags.json
+ml-service/models/*/meta.nolags.lgb
 ml-service/tests/.pytest_cache/
 __pycache__/
 *.pyc

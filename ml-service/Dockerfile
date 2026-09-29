@@ -24,8 +24,9 @@ COPY ml-service/scripts ./scripts
 # it), and a volume would hide the image content.
 # docker-entrypoint.sh copies these in whenever the volume has no meta.json
 # for a category, so a fresh deployment needs no manual podman cp.
-# ml-service/models/ holds only .gitkeep in a clean clone — the copy is then
-# empty and the service reports the missing models rather than inventing one.
+# The artifacts are tracked in git AND baked here, so a clean clone builds a
+# self-contained image. If they are ever removed, the copy is empty and the
+# service reports the missing models rather than inventing one.
 COPY ml-service/models ./models-baked
 COPY ml-service/docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
 RUN useradd -m appuser \
