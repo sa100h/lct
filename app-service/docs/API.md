@@ -278,6 +278,38 @@ curl -k https://localhost/api/app/dashboard \
 
 ---
 
+## Отчеты
+
+### `GET /reports/{code}`
+
+Нужны JWT и permission `module.reports`. PDF за период. Данные по всей системе,
+без фильтра роли. `from` и `to` — календарные даты Москвы (`yyyy-MM-dd`), обе
+включительно. Максимум 93 дня: `(to - from).Days + 1 ≤ 93`. В SQL — полуинтервал
+UTC `[from 00:00 Europe/Moscow, (to+1 день) 00:00 Europe/Moscow)`.
+`forecast_journal.creation_time` без пояса трактовать как UTC.
+
+Коды: `summary`, `alarms`, `requests`, `technicians`, `forecasts`.
+Имена файлов: `svodka_`, `trevogi_`, `zayavki_`, `tehniki_`, `prognozy_`
++ `{from}_{to}.pdf`.
+
+Сводка: KPI тревог, заявок (созданных в периоде, текущий статус), прогнозов;
+ряды по московским дням. Тревоги и заявки — таблицы до 2000 строк, иначе
+«показано 2000 из N». Техники: создано в периоде; закрыто = статус «Закрыта» и
+`updated_at` в периоде. Прогнозы: журналы за период, высокий риск как в истории
+(порог `Forecast:RiskThreshold`).
+
+Ответ 200: `application/pdf`. Пустые данные — всё равно PDF, не 404.
+
+| Код | Когда |
+|---|---|
+| 400 | Нет/битые даты, `from > to`, больше 93 дней |
+| 401 | Нет JWT |
+| 403 | Нет `module.reports` |
+| 404 | Неизвестный `code` |
+| 500 | Сбой БД или рендера |
+
+---
+
 ## Запуски прогнозирования
 
 ### `POST /forecasts/run`
@@ -749,6 +781,7 @@ curl -k https://localhost/api/app/authz/demo \
 | GET | `/status` | `/api/app/status` | нет |
 | GET | `/dispatcher_objects` | `/api/app/dispatcher_objects` | Bearer + `module.map` |
 | GET | `/dashboard` | `/api/app/dashboard` | Bearer + `module.dashboard` |
+| GET | `/reports/{code}` | `/api/app/reports/{code}` | Bearer + `module.reports` |
 | GET | `/ml/status` | `/api/app/ml/status` | нет |
 | POST | `/forecasts/run` | `/api/app/forecasts/run` | Bearer + `module.prediction` |
 | GET | `/forecasts/authors` | `/api/app/forecasts/authors` | Bearer + `module.history` |

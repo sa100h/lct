@@ -1,0 +1,23 @@
+.reports-page {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  max-width: 720px;
+}
+
+.reports-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: center;
+}
+
+.reports-type {
+  min-width: 260px;
+}
+
+.reports-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}

@@ -49,6 +49,7 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<IRequestRepository>(_ => new NpgsqlRequestRepository(connectionString));
         services.AddSingleton<IForecastResultRepository>(_ => new NpgsqlForecastResultRepository(connectionString));
         services.AddSingleton<IDashboardFeedRepository>(_ => new NpgsqlDashboardFeedRepository(connectionString));
+        services.AddSingleton<IReportFeedRepository>(_ => new NpgsqlReportFeedRepository(connectionString));
         services.AddSingleton<IForecastJournalRepository>(_ => new NpgsqlForecastJournalRepository(connectionString));
         services.AddSingleton<IForecastChannelRepository>(_ => new NpgsqlForecastChannelRepository(connectionString));
         services.AddSingleton<IAutomaticForecastRepository>(provider =>
@@ -66,6 +67,8 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IRequestQueryService, RequestQueryService>();
         services.AddScoped<IRequestCommandService, RequestCommandService>();
         services.AddScoped<IForecastErroneousService, ForecastErroneousService>();
+        services.AddScoped<IReportQueryService, ReportQueryService>();
+        services.AddSingleton<IReportPdfRenderer, ReportPdfRenderer>();
         services.AddSingleton<PostgresMigrator>();
         services.AddHostedService<AppMigrationHostedService>();
         services.AddHostedService<ForecastHourlyWorker>();
