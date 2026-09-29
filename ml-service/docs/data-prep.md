@@ -13,7 +13,14 @@
 
 `<кат>` — одна из `sensor-failure`, `fire-risk`, `unauthorized-access`,
 `infrastructure-wear`. Полное описание самих файлов — `ml-data/DATA_CATALOG.md`
-(§4 и §4.4). Команда, поднимающая сервис: `ml-broker/README.md`.
+(§4 и §4.4). Поднять стек (обе части обязательны: без второй не публикуются
+порты, без env podman-compose падает на `${AD_BIND_PASSWORD:?}`):
+
+```bash
+cd /home/junai/lct
+set -a; . ./.env.e2e; set +a
+podman-compose -f docker-compose.yml -f podman-compose.override.yml up -d --no-deps ml-service ml-broker
+```
 
 ## Порядок сборки данных
 
