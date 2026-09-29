@@ -22,6 +22,9 @@ Environment
 ``LCT_FEATURES_DIR``
     Optional override for the feature-parquet directory alone; defaults to
     ``$LCT_DATA_DIR/features``. Tests use it to point at a fixture dir.
+``LCT_AGG_DIR`` / ``LCT_EXTRACTED_DIR`` / ``LCT_ANALYSIS_DIR``
+    Overrides for the ingest-pipeline directories (defaults: ``agg``,
+    ``extracted``, ``analysis`` under the data root).
 """
 
 from __future__ import annotations
@@ -43,3 +46,11 @@ def _env_path(name: str) -> str | None:
 
 DATA_DIR = Path(_env_path("LCT_DATA_DIR") or DEFAULT_DATA_DIR)
 FEATURES_DIR = Path(_env_path("LCT_FEATURES_DIR") or (DATA_DIR / "features"))
+
+# Ingest-pipeline directories. Declared here (not inside the modules) because
+# the container mounts the tree at a different absolute path than the dev box,
+# and because importing a module must not create directories as a side effect
+# (read-only mounts, tests).
+AGG_DIR = Path(_env_path("LCT_AGG_DIR") or (DATA_DIR / "agg"))
+EXTRACTED_DIR = Path(_env_path("LCT_EXTRACTED_DIR") or (DATA_DIR / "extracted"))
+ANALYSIS_DIR = Path(_env_path("LCT_ANALYSIS_DIR") or (DATA_DIR / "analysis"))

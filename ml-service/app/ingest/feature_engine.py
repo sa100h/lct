@@ -34,12 +34,12 @@ import pandas as pd
 import pyarrow.parquet as pq
 from pyarrow import concat_tables
 
+from app.config import AGG_DIR, DATA_DIR, FEATURES_DIR
 from app.ingest.aggregate import STATES
 
-BASE = Path("/home/junai/lct/ml-data")
-AGG = BASE / "agg"
-FEAT = BASE / "features"
-FEAT.mkdir(parents=True, exist_ok=True)
+BASE = DATA_DIR
+AGG = AGG_DIR
+FEAT = FEATURES_DIR
 
 CATS = {
     "sensor-failure": None,  # all channels

@@ -20,8 +20,10 @@ from collections import Counter
 import numpy as np
 import pandas as pd
 
-EX = Path("/home/junai/lct/ml-data/extracted")
-OUT = Path("/home/junai/lct/ml-data/analysis/state-scan.json")
+from app.config import ANALYSIS_DIR, DATA_DIR, EXTRACTED_DIR
+
+EX = EXTRACTED_DIR
+OUT = ANALYSIS_DIR / "state-scan.json"
 COLS = ["ид_канала_данных", "тревожное", "значение_датчика"]
 CHUNK = 4_000_000
 TRUE_TOKENS = {"t", "true", "1", "yes"}
@@ -30,9 +32,9 @@ FALSE_TOKENS = {"f", "false", "0", "no"}
 # gas histogram bins: %volume methane. <0, fine 0-1 grid, 1-2, 2-5, 5-15, 15-100, >100
 GAS_BINS = [-np.inf, -1e-9, 0.1, 0.3, 0.5, 0.7, 0.9, 1.0, 1.5, 2.0, 3.0, 5.0, 15.0, 100.0, np.inf]
 
-ref = pd.read_csv("/home/junai/lct/ml-data/справочник_каналов_датчиков.csv", dtype=str)
+ref = pd.read_csv(DATA_DIR / "справочник_каналов_датчиков.csv", dtype=str)
 type_map = ref.set_index("ид_канала_данных")["тип_датчика"].to_dict()
-sd = pd.read_csv("/home/junai/lct/ml-data/справочник_состояний.csv")
+sd = pd.read_csv(DATA_DIR / "справочник_состояний.csv")
 dict_states = set(sd["название_состояния"].unique())
 alarm_dict = set(sd[sd["тревожное"] == "true"]["название_состояния"].unique())
 
