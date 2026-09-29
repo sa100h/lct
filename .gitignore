@@ -37,6 +37,12 @@ __pycache__/
 # ingested data (organizer exports, local only)
 ml-data/*
 !ml-data/.gitkeep
+# Tracked deliberately despite the rule above (force-added, same as the eight
+# agg/agg-<year>.parquet and the reference CSVs): the eight serving files
+# features-<cat>.parquet + features-<cat>-latest.parquet, so a clone can train
+# and audit the shipped models against the exact data. Everything else under
+# ml-data/ stays local: hourly agg, raw 7z/extracted (~15 GB), and experiment
+# outputs such as features-fire-risk-enriched.parquet and spatial.parquet.
 ext-journal-*.7z
 archive-*.zip
 
