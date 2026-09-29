@@ -22,6 +22,7 @@ Design notes
 from __future__ import annotations
 
 import os
+from pathlib import Path
 
 import numpy as np
 import lightgbm as lgb
@@ -38,6 +39,7 @@ from sklearn.metrics import (
 
 from app.ingest.lag_features import LAG_SET
 from app.config import FEATURES_DIR
+from app.models.fsutil import atomic_write
 from app.models.registry import CATEGORIES
 
 META = ("channel", "day", "year", "label")
@@ -299,8 +301,12 @@ def predict_proba(booster: lgb.Booster, X: np.ndarray) -> np.ndarray:
 
 
 def save_artifact(booster: lgb.Booster, path) -> None:
-    """models/<cat>/model.lgb — text, compact, loadable via lgb.Booster(model_file=...)."""
-    booster.save_model(str(path))
+    """models/<cat>/model.lgb — text, compact, loadable via lgb.Booster(model_file=...).
+
+    Written via a temp file + rename: the models directory is a persistent
+    volume, so an interrupted retrain must not leave a truncated artifact.
+    """
+    atomic_write(Path(path), lambda tmp: booster.save_model(str(tmp)))
 
 
 # --------------------------------------------------------------------------- #

@@ -13,6 +13,8 @@ from pathlib import Path
 import joblib
 from typing import Literal
 
+from app.models.fsutil import atomic_write
+
 MODELS_DIR = Path(__file__).resolve().parents[2] / "models"
 
 CATEGORIES: tuple[str, ...] = (
@@ -52,17 +54,16 @@ class ModelRegistry:
         cat_dir = self.root / category
         cat_dir.mkdir(parents=True, exist_ok=True)
         version = version or f"v-{datetime.now(timezone.utc):%Y%m%d-%H%M%S}"
+        # Both the artifact and meta.json go through a temp file + rename: a
+        # retrain killed mid-write must not leave a truncated model (or a
+        # half-written pointer to one) in the persistent volume.
         is_lgbm = hasattr(model, "save_model")  # lgb.Booster artifact
         if is_lgbm:
-            model.save_model(cat_dir / "model.lgb")
+            atomic_write(cat_dir / "model.lgb", lambda tmp: model.save_model(tmp))
             artifact = "model.lgb"
         else:
-            joblib.dump(model, cat_dir / "model.joblib")
+            atomic_write(cat_dir / "model.joblib", lambda tmp: joblib.dump(model, tmp))
             artifact = "model.joblib"
-        # drop any stale artifact of the other engine so load() is unambiguous
-        stale = cat_dir / ("model.joblib" if is_lgbm else "model.lgb")
-        if stale.exists():
-            stale.unlink()
         meta = {
             "version": version,
             "engine": engine or (artifact if not is_lgbm else "lightgbm"),
@@ -75,7 +76,17 @@ class ModelRegistry:
             meta["threshold"] = float(threshold)
         if calibrator is not None:
             meta["calibrator"] = calibrator
-        (cat_dir / "meta.json").write_text(json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8")
+        atomic_write(
+            cat_dir / "meta.json",
+            lambda tmp: tmp.write_text(
+                json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8"
+            ),
+        )
+        # load() follows meta.json, so the stale artifact of the other engine is
+        # only dropped once the new pointer is in place.
+        stale = cat_dir / ("model.joblib" if is_lgbm else "model.lgb")
+        if stale.exists():
+            stale.unlink()
 
     def load(self, category: str):
         meta = _load_meta(category)
