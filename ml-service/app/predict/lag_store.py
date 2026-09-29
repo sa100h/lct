@@ -42,11 +42,15 @@ from typing import Callable
 import numpy as np
 import pyarrow.parquet as pq
 
+from app.config import FEATURES_DIR
 from app.ingest.lag_features import LAG_FEATURES, day_ordinal, lag_values_for_history
 
 logger = logging.getLogger(__name__)
 
-FEAT_DIR = Path("/home/junai/lct/ml-data/features")
+# Resolved from LCT_DATA_DIR / LCT_FEATURES_DIR (see app/config.py). The
+# container mounts the data at /app/data, so this must NOT be a hardcoded
+# host path — that is what silently emptied the store (2026-09-29).
+FEAT_DIR = FEATURES_DIR
 
 
 def _feat_path(category: str) -> Path:

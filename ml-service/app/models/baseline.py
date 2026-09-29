@@ -3,7 +3,9 @@
 Trains a HistGradientBoostingClassifier per category from the REAL
 feature files produced by app/ingest/feature_engine.py:
 
-    /home/junai/lct/ml-data/features/features-<category>.parquet
+    $LCT_DATA_DIR/features/features-<category>.parquet
+
+(see app/config.py; defaults to the dev-box path)
 
 Temporal split: the whole year 2026 is held out as the test set (it is
 the most recent year — closest to a live forecast); 2019..2025 train.
@@ -17,12 +19,17 @@ to <= 2M rows BEFORE any float64 materialization. HGB converges fine on
 
 Fallback: if no feature file exists for a category, a small synthetic
 dataset is generated so the service always has a working model (the
-rest of the stack can integrate before the data pipeline lands).
+rest of the stack can integrate before the data pipeline lands). That
+fallback is DISABLED when ``LCT_ALLOW_SYNTHETIC=false`` (set in
+docker-compose): inside a container a missing parquet means a broken
+data mount, and silently substituting a synthetic model overwrites the
+trained artifact — serving then emits a constant for every sensor.
 """
 
 from __future__ import annotations
 
 import logging
+import os
 from pathlib import Path
 
 import numpy as np
@@ -31,12 +38,16 @@ import pyarrow.parquet as pq
 from sklearn.ensemble import HistGradientBoostingClassifier
 from sklearn.metrics import average_precision_score, precision_score, recall_score, roc_auc_score
 
+from app.config import FEATURES_DIR
 from app.models.features import features_for
 from app.models.registry import get_registry
 
 logger = logging.getLogger(__name__)
 
-FEAT_DIR = Path("/home/junai/lct/ml-data/features")
+# Env-driven (app/config.py): the container mounts the data at /app/data, so a
+# hardcoded host path silently sent the trainer into the synthetic fallback and
+# overwrote the trained models (2026-09-29).
+FEAT_DIR = FEATURES_DIR
 # train buffer in float32 (HGB fits on float32 directly): the 134-feature
 # tables overflowed the 3.8GB box via a fit-time float64 copy (SIGKILL 137).
 # 1.0M rows keeps the fit-time peak ~1.5GB — sensor-failure's 2.46M-row table
@@ -62,8 +73,23 @@ def _synthetic_baseline(category: str, n: int = 2000, seed: int = 42) -> tuple[n
     return X, y
 
 
+def _allow_synthetic() -> bool:
+    """True unless ``LCT_ALLOW_SYNTHETIC`` is explicitly false-ish.
+
+    Read at call time (not import time) so it stays testable and a container
+    can flip it without a code change."""
+    raw = (os.environ.get("LCT_ALLOW_SYNTHETIC") or "").strip().lower()
+    return raw not in ("0", "false", "no", "off")
+
+
 def _train_synthetic(category: str) -> dict:
     """Fallback path: no real data yet — fit a demonstrable model."""
+    if not _allow_synthetic():
+        raise RuntimeError(
+            f"No feature file for '{category}' at {FEAT_DIR} and "
+            "LCT_ALLOW_SYNTHETIC=false: refusing to replace a trained model with a "
+            "synthetic baseline. Check the data mount / LCT_DATA_DIR."
+        )
     X, y = _synthetic_baseline(category)
     model = HistGradientBoostingClassifier(max_iter=200, random_state=42)
     model.fit(X, y)

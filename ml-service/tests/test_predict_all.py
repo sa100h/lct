@@ -101,18 +101,23 @@ def test_predict_all_returns_all_categories(eng):
 
 
 def test_predict_all_applicability_gate(eng):
-    """Contract since 2026-09-28: the has_subject gate is GONE.
+    """Coverage gate (restored 2026-09-29): a category is applicable only when
+    its model actually trained on this channel.
 
-    Journal subject ids come from the app domain and never match the
-    organizer-id keys of the training history, so the old gate fired on
-    everything and every forecast degraded to applicable=false stubs. Now
-    all four categories are always scored (NaN lags are handled natively)."""
+    s1 is trained in sensor-failure + fire-risk (see FakeStoreAll.has_subject),
+    so unauthorized-access / infrastructure-wear must come back
+    ``applicable=False`` with ``prediction=None`` instead of a constant score.
+    (The earlier "gate is gone" contract was a workaround for an EMPTY LagStore
+    caused by the container data-path bug — measured overlap is 99.1%.)"""
     e, _, _ = eng
     resp = e.predict_all("s1", {}, 24)
     by_cat = {p.category.value: p for p in resp.predictions}
-    for cat in ("sensor-failure", "fire-risk", "unauthorized-access", "infrastructure-wear"):
+    for cat in ("sensor-failure", "fire-risk"):
         assert by_cat[cat].applicable is True
         assert by_cat[cat].prediction is not None
+    for cat in ("unauthorized-access", "infrastructure-wear"):
+        assert by_cat[cat].applicable is False
+        assert by_cat[cat].prediction is None
 
 
 def test_predict_all_predictions_carry_scores(eng):
@@ -136,16 +141,33 @@ def test_predict_all_client_override(eng):
     assert p_client == pytest.approx(0.9), "client base feature must win over store"
 
 
-def test_predict_all_no_history_subject_still_scores_applicable(eng):
+def test_predict_all_no_history_subject_only_applicable_where_trained(eng):
+    """s0 has history in sensor-failure ONLY -> only that category is applicable.
+
+    The uncovered categories must NOT emit a constant score (all-zero base +
+    NaN lags would read as a confident forecast)."""
     e, _, _ = eng
     resp = e.predict_all("s0", {}, 24)
     by_cat = {p.category.value: p for p in resp.predictions}
-    # s0 has no history at all: NaN lags -> base f_a missing -> 0.0 -> p=0,
-    # but every category still scores (gate removed 2026-09-28).
-    for cat in ("sensor-failure", "fire-risk", "unauthorized-access", "infrastructure-wear"):
-        assert by_cat[cat].applicable is True
-        assert by_cat[cat].prediction is not None
+    assert by_cat["sensor-failure"].applicable is True
+    assert by_cat["sensor-failure"].prediction is not None
     assert by_cat["sensor-failure"].prediction.probability == pytest.approx(0.0)
+    for cat in ("fire-risk", "unauthorized-access", "infrastructure-wear"):
+        assert by_cat[cat].applicable is False
+        assert by_cat[cat].prediction is None
+
+
+def test_predict_all_response_always_lists_four_categories(eng):
+    """Applicability never shortens the response: 4 entries, stable order."""
+    e, _, _ = eng
+    resp = e.predict_all("s0", {}, 24)
+    assert [p.category.value for p in resp.predictions] == [
+        "sensor-failure",
+        "fire-risk",
+        "unauthorized-access",
+        "infrastructure-wear",
+    ]
+    assert len(resp.predictions) == 4
 
 
 # --------------------------------------------------------------------------- #
@@ -173,4 +195,7 @@ def test_predict_all_endpoint(eng, monkeypatch):
         "infrastructure-wear",
     ]
     ua = body["predictions"][2]
-    assert ua["applicable"] is True and ua["prediction"] is not None
+    assert ua["category"] == "unauthorized-access"
+    assert ua["applicable"] is False and ua["prediction"] is None
+    sf = body["predictions"][0]
+    assert sf["applicable"] is True and sf["prediction"] is not None

@@ -21,7 +21,7 @@ Design notes
 
 from __future__ import annotations
 
-from pathlib import Path
+import os
 
 import numpy as np
 import lightgbm as lgb
@@ -37,13 +37,36 @@ from sklearn.metrics import (
 )
 
 from app.ingest.lag_features import LAG_SET
+from app.config import FEATURES_DIR
 from app.models.registry import CATEGORIES
 
 META = ("channel", "day", "year", "label")
 SEED = 42
-FEAT_DIR = Path("/home/junai/lct/ml-data/features")
-MAX_TRAIN_ROWS = 1_000_000
-MAX_VALID_ROWS = 500_000
+# Env-driven (app/config.py) — a hardcoded host path breaks inside the container.
+FEAT_DIR = FEATURES_DIR
+
+
+def _env_int(name: str, default: int) -> int:
+    """Positive int from the environment, else ``default`` (IGNORES junk)."""
+    raw = os.environ.get(name)
+    if raw is None or not raw.strip():
+        return default
+    try:
+        value = int(raw)
+    except ValueError:
+        return default
+    return value if value > 0 else default
+
+
+# Memory knob. These two caps size the in-RAM train/valid matrices that
+# stream_split materializes (float32, ~197 cols): 1M train rows is ~790 MB, and
+# LightGBM's Dataset construction adds its own copy on top. On the 3.9 GB box a
+# full-cap fit with little free RAM gets SIGKILLed (exit 137). Override for a
+# tighter box WITHOUT editing code:
+#     LCT_MAX_TRAIN_ROWS=400000 LCT_MAX_VALID_ROWS=150000 python -m scripts.train ...
+# Defaults are unchanged, so production behaviour is identical unless set.
+MAX_TRAIN_ROWS = _env_int("LCT_MAX_TRAIN_ROWS", 1_000_000)
+MAX_VALID_ROWS = _env_int("LCT_MAX_VALID_ROWS", 500_000)
 
 # Experiment params (scripts/_lag_model.py) — the known-good default.
 LGB_PARAMS_DEFAULT: dict = dict(

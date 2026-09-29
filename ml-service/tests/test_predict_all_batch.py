@@ -111,3 +111,70 @@ def test_endpoint_batch_as_of_forwarded(monkeypatch):
         assert captured["features"] == {}
     finally:
         PredictEngine.predict_all_batch = orig_batch  # type: ignore[method-assign]
+
+
+# --------------------------------------------------------------------------- #
+# coverage gate in the batch path
+# --------------------------------------------------------------------------- #
+
+
+def test_batch_applies_coverage_gate_per_category(monkeypatch):
+    """Uncovered (category, channel) pairs come back applicable=False/None.
+
+    The batch path must gate exactly like ``predict_all`` — otherwise the
+    forecast journal would store a constant for channels the category never
+    trained on."""
+    from app.predict import engine as engine_mod
+    from app.predict.engine import PredictEngine
+    from app.ingest.lag_features import LAG_FEATURES
+
+    store = FakeStoreAll()
+    monkeypatch.setattr(engine_mod, "get_store", lambda: store)
+    e = PredictEngine()
+    e._registry = FakeRegistryAll(["f_a", "f_b", LAG_FEATURES[0]])  # type: ignore[assignment]
+    app.state.engine = e
+
+    client = TestClient(app)
+    r = client.post("/predict_all_batch", json={"subject_ids": ["s1", "s0"]})
+    assert r.status_code == 200, r.text
+    preds = r.json()["predictions"]
+    assert [p["subject_id"] for p in preds] == ["s1", "s0"]
+
+    s1 = {p["category"]: p for p in preds[0]["predictions"]}
+    assert s1["sensor-failure"]["applicable"] is True
+    assert s1["fire-risk"]["applicable"] is True
+    for cat in ("unauthorized-access", "infrastructure-wear"):
+        assert s1[cat]["applicable"] is False
+        assert s1[cat]["prediction"] is None
+
+    # s0 trained sensor-failure only
+    s0 = {p["category"]: p for p in preds[1]["predictions"]}
+    assert s0["sensor-failure"]["applicable"] is True
+    for cat in ("fire-risk", "unauthorized-access", "infrastructure-wear"):
+        assert s0[cat]["applicable"] is False
+        assert s0[cat]["prediction"] is None
+
+
+def test_batch_matches_predict_all_including_applicability(monkeypatch):
+    """Batch entries must equal the single-subject predict_all result
+    (same applicability, same probability) — the batch is only a speed-up."""
+    from app.predict import engine as engine_mod
+    from app.predict.engine import PredictEngine
+    from app.ingest.lag_features import LAG_FEATURES
+
+    store = FakeStoreAll()
+    monkeypatch.setattr(engine_mod, "get_store", lambda: store)
+    e = PredictEngine()
+    e._registry = FakeRegistryAll(["f_a", "f_b", LAG_FEATURES[0]])  # type: ignore[assignment]
+
+    batch = e.predict_all_batch(["s1", "s0"], {}, 24)
+    for entry in batch:
+        single = e.predict_all(entry.subject_id, {}, 24)
+        for a, b in zip(entry.predictions, single.predictions):
+            assert a.category == b.category
+            assert a.applicable is b.applicable
+            if b.prediction is None:
+                assert a.prediction is None
+            else:
+                assert a.prediction is not None
+                assert a.prediction.probability == b.prediction.probability

@@ -202,6 +202,14 @@ services:
       dockerfile: ml-service/Dockerfile
     environment:
       ML_HORIZON_HOURS: "24"
+      # Data root = the compose mount point, NOT the dev-box absolute path the
+      # serving code used to hardcode (see ml-service/app/config.py). Getting
+      # this wrong silently emptied the LagStore and let a retrain overwrite the
+      # trained models with a synthetic stub.
+      LCT_DATA_DIR: /app/data
+      # A missing parquet inside the container means a broken mount — refuse the
+      # synthetic fallback instead of replacing the trained model with a stub.
+      LCT_ALLOW_SYNTHETIC: "false"
     volumes:
       - ml_models:/app/models
       - ./ml-data:/app/data:ro

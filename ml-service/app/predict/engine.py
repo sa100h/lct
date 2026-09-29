@@ -165,7 +165,11 @@ class PredictEngine:
 
         Per-subject ``current_features`` overrides are supported (a channel with
         no entry falls back to the store features, ``None``). One ``as_of``
-        for the whole batch; channels are returned in request order.
+        for the whole batch; channels are returned in request order. The
+        coverage gate is applied per (category, channel): uncovered pairs come
+        back ``applicable=False`` / ``prediction=None``, exactly as in
+        ``predict_all``. The per-category model call still runs over the whole
+        matrix (the vectorisation win is kept) and uncovered rows are discarded.
         """
         as_of = as_of or datetime.now(timezone.utc)
         features = features or {}
@@ -177,6 +181,9 @@ class PredictEngine:
             feature_names = self._registry.feature_names(cat)
             if not feature_names:
                 raise KeyError(f"No model features registered for category '{cat}'")
+            # Coverage gate (same rule as predict_all): a channel the category
+            # never trained on must not get a constant built from zero/NaN.
+            applicable = [get_store().has_subject(cat, s) for s in subject_ids]
             # assemble one feature row per channel (same build_vector -> same output)
             rows: list[list[float]] = [
                 self.build_vector(cat, subject, features.get(subject), as_of)
@@ -191,6 +198,11 @@ class PredictEngine:
             threshold = self._registry.threshold(cat)
 
             for i, subject in enumerate(subject_ids):
+                if not applicable[i]:
+                    by_subject[subject].append(
+                        AllPrediction(category=Category(cat), applicable=False, prediction=None)
+                    )
+                    continue
                 named = dict(zip(feature_names, rows[i]))
                 p = float(proba[i])
                 c = float(calibrated[i])
@@ -221,6 +233,24 @@ class PredictEngine:
             for s in subject_ids
         ]
 
+    def _applicable(self, category: str, subject_id: str) -> bool:
+        """True when this category's model actually trained on this channel.
+
+        The category parquets are built from DISJOINT channel subsystems:
+        fire-risk (6 830 channels), unauthorized-access (2 209) and
+        infrastructure-wear (2 443) never overlap each other and are all
+        subsets of sensor-failure's 11 482. A channel therefore belongs to
+        sensor-failure plus exactly ONE other category; scoring the remaining
+        two would emit a value built from an all-zero base row and NaN lags —
+        a constant that reads as a confident forecast. Mark those not
+        applicable instead.
+
+        (The gate was removed on 2026-09-28 because it "fired on everything":
+        that was the EMPTY LagStore caused by the container data-path bug, not
+        an id-namespace mismatch. Measured app-id overlap is 99.1%.)
+        """
+        return get_store().has_subject(category, subject_id)
+
     def predict_all(
         self,
         subject_id: str,
@@ -232,16 +262,16 @@ class PredictEngine:
 
         Same as_of for every category; per-category vector assembly and model
         calls reuse predict() verbatim, so results are identical to four
-        /predict calls. Every category is scored — a subject without training
-        history gets the documented NaN-lag vector, which LightGBM handles
-        natively. (The former has_subject applicability gate is gone: journal
-        subject ids come from the app domain and never match the organizer-id
-        keys of the training history, so the gate fired on EVERYTHING and
-        every forecast degraded to applicable=false stubs.)
+        /predict calls. A category whose model never trained this channel comes
+        back ``applicable=False`` with ``prediction=None`` — never a constant.
+        The response always lists all four categories in registry order.
         """
         as_of = as_of or datetime.now(timezone.utc)
         out: list[AllPrediction] = []
         for cat in CATEGORIES:
+            if not self._applicable(cat, subject_id):
+                out.append(AllPrediction(category=Category(cat), applicable=False, prediction=None))
+                continue
             p = self.predict(cat, subject_id, features, horizon_hours, as_of=as_of)
             out.append(AllPrediction(category=Category(cat), applicable=True, prediction=p))
         return AllCategoriesResponse(

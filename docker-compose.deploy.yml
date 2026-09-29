@@ -180,6 +180,12 @@ services:
     pull_policy: always
     environment:
       ML_HORIZON_HOURS: "24"
+      # Data root = the compose mount point, NOT a dev-box absolute path (see
+      # ml-service/app/config.py).
+      LCT_DATA_DIR: /app/data
+      # A missing parquet inside the container means a broken mount — refuse the
+      # synthetic fallback instead of replacing the trained model with a stub.
+      LCT_ALLOW_SYNTHETIC: "false"
     volumes:
       - ml_models:/app/models
       - ./ml-data:/app/data:ro
