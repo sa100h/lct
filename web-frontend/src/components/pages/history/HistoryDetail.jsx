@@ -26,7 +26,7 @@ import { listUsersByRole } from '@/api/users.js'
 import { buildObjectTree } from '@/components/pages/prediction/buildObjectTree.js'
 import { mapForecastTone, mergeExpandedKeys, rootExpandedKeys, scrollTreeToKey, toMapMarkers } from '@/components/pages/map/mapTreeKeys.js'
 import { formatObjectCount } from '@/components/objectTree/formatObjectCount.js'
-import { forecastCategoryLabel, forecastResultHeadline } from '@/components/pages/history/forecastResultCopy.js'
+import { forecastCategoryLabel, forecastResultHeadline, formatForecastValueList } from '@/components/pages/history/forecastResultCopy.js'
 import { FORECAST_STATUS_LABEL, forecastStatusTagColor } from '@/components/pages/history/forecastStatusTag.js'
 import HistoryObjectCheckTree from '@/components/pages/history/HistoryObjectCheckTree.jsx'
 import YandexMap from '@/components/pages/map/YandexMap.jsx'
@@ -262,6 +262,7 @@ export default function HistoryDetail() {
   const showAlert = !apikey || loadError
   const alertText = !apikey ? MISSING_KEY_TEXT : LOAD_ERROR_TEXT
   const objects = detail?.objects ?? []
+  const formattedForecastValues = formatForecastValueList(modalObject?.forecastValues)
 
   return (
     <div className="history-detail">
@@ -382,11 +383,11 @@ export default function HistoryDetail() {
             </p>
             {modalObject.isErroneous ? <p>Помечен как ошибочный</p> : null}
             <p>{forecastResultHeadline(modalObject)}</p>
-            {(modalObject.forecastValues?.length ?? 0) > 0 ? (
+            {formattedForecastValues.length > 0 ? (
               <ul>
-                {modalObject.forecastValues.map((item) => (
+                {formattedForecastValues.map((item) => (
                   <li key={`${item.channelId}-${item.category}`}>
-                    {item.channelId} — {forecastCategoryLabel(item.category)}: {item.value}
+                    {item.channelId} — {forecastCategoryLabel(item.category)}: {item.displayValue}
                   </li>
                 ))}
               </ul>
