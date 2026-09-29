@@ -16,7 +16,8 @@ docs/superpowers/
 
 # ml-service
 ml-service/.venv/
-ml-service/models/
+ml-service/models/*
+!ml-service/models/.gitkeep
 ml-service/tests/.pytest_cache/
 __pycache__/
 *.pyc

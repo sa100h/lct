@@ -19,8 +19,18 @@ RUN pip install -r requirements.txt
 
 COPY ml-service/app ./app
 COPY ml-service/scripts ./scripts
+# The trained models ship INSIDE the image, but not at /app/models: compose
+# mounts the writable named volume ml_models there (the scheduler's
+# POST /retrain writes into it), and a volume would hide the image content.
+# docker-entrypoint.sh copies these in whenever the volume has no meta.json
+# for a category, so a fresh deployment needs no manual podman cp.
+# ml-service/models/ holds only .gitkeep in a clean clone — the copy is then
+# empty and the service reports the missing models rather than inventing one.
+COPY ml-service/models ./models-baked
+COPY ml-service/docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
 RUN useradd -m appuser \
     && mkdir -p /app/models /app/data \
+    && chmod +x /usr/local/bin/docker-entrypoint.sh \
     && chown -R appuser:appuser /app
 USER appuser
 EXPOSE 8000
@@ -33,4 +43,7 @@ EXPOSE 8000
 HEALTHCHECK --interval=15s --timeout=5s --start-period=30s \
     CMD python -c "import sys,urllib.request; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/healthz', timeout=3).status == 200 else 1)"
 
-ENTRYPOINT ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+# uvicorn moved from ENTRYPOINT to CMD so docker-entrypoint.sh (which seeds the
+# models volume) can run first and still exec the server unchanged.
+ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]

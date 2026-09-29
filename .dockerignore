@@ -14,3 +14,10 @@ certs
 ml-data
 ext-journal-*.7z
 
+# Only the four production model dirs are baked into the ml-service image
+# (COPY ml-service/models ./models-baked). Exclude the CI simulation tree and
+# the no-lags control models: experiment artifacts, ~24 MB vs ~2.5 MB.
+ml-service/models/models.ci-sim
+ml-service/models/*/meta.nolags.json
+ml-service/models/*/meta.nolags.lgb
+

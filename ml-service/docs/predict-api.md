@@ -119,3 +119,5 @@ curl -s http://127.0.0.1:8742/healthz   # {"status":"ok"}
 curl -s http://127.0.0.1:8742/status    # models.<cat>.model_version + lags.<cat> (свежесть истории: n_channels, n_rows, max_day)
 ```
 `lags.<cat>.max_day` — дата последней накопленной строки истории. ⚠️ Если `lags.<cat>.status` = `empty` (а `n_channels` = `null`) — сервис НЕ видит паркеты фич: все каналы уйдут как «неизвестные» (`applicable=false` / нулевой вектор). Это признак неверно смонтированных данных (`LCT_DATA_DIR`), а не «плохой модели».
+
+Что именно должно лежать на хосте и как это собрать — `docs/data-prep.md`.
