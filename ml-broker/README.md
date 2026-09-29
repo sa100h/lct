@@ -4,7 +4,8 @@
 субъектов, вызывает `POST /predict_all_batch` на ml-service и пишет прогнозы
 в `predictions`. Один asyncio-процесс: пул БД + потребитель очереди с
 retry/backoff и восстановлением разорванных батчей + пробуждение по каналу
-`LISTEN` + HTTP-сервер `/healthz` (порт 8080).
+`LISTEN` + HTTP-сервер `/healthz` (порт 8080) + планировщик `ml_schedule`,
+который по cron запускает переобучение модели.
 
 Пути в этом README — относительно корня репозитория. Образ собирается
 **всегда из всего репозитория** (`docker build .` — из корня): внутри
@@ -26,6 +27,55 @@ retry/backoff и восстановлением разорванных батч�
    восстанавливаются автоматически.
 6. `NotifierWorker` слушает канал `lct_ml_forecast` — внешние события (например
    из app-service) пробуждают потребителя, а polling остаётся страховкой.
+7. `SchedulerWorker` выполняет задания из `ml_schedule` — единственный
+   поддерживаемый вид — `retrain` (см. ниже).
+
+## Планировщик (`ml_schedule`)
+
+Третий воркер (`app/scheduler_worker.py`) выполняет задания из таблицы
+`ml_schedule`: раз в `SCHEDULER_POLL_SECONDS` он забирает строки, у которых
+`enabled` и `next_run_at <= now()`, и запускает их.
+
+- **Поддерживается только `kind='retrain'`**: вызывает `POST /retrain` на
+  ml-service и ведёт историю в `ml_retrain_runs` (`running` -> `done`/`failed`,
+  результат в `metrics`). `predict-all` не реализован — прогнозы идут через
+  очередь (`ml_predict_queue`), поэтому сеяная строка `hourly-predict` отключена
+  миграцией `039_disable_predict_all_schedule.sql`. Включённая строка
+  неизвестного вида не выполняется, но её расписание продвигается: планировщик
+  не зацикливается и не молчит об этом.
+- **`cron_expr` — 5 полей** (`min hour day-of-month month day-of-week`), разбор
+  собственный (`app/cron.py`, без зависимостей): `*`, списки, диапазоны, шаги
+  (`*/15`, `1-5/2`), воскресенье — `0` или `7`. Время трактуется как **UTC**.
+  Действуют правила Vixie: если заданы и день месяца, и день недели, сработает
+  любой из них.
+- **Пропущенные запуски не догоняются**: задание, опоздавшее больше чем на
+  `SCHEDULER_MISSED_GRACE_SECONDS`, не запускается, а переносится на следующее
+  время (с записью в лог). Старт брокера после простоя не запускает вчерашнее
+  переобучение.
+- **Строка с `next_run_at = NULL`** (в том числе только что вставленная) сначала
+  получает время следующего запуска и не запускается.
+- **Одновременно идёт не более одного переобучения**, и оно выполняется фоновой
+  задачей: обучение длится минуты и не должно блокировать опрос расписания.
+  Строки клеймятся в одной транзакции с `FOR UPDATE SKIP LOCKED`, поэтому два
+  брокера не запустят одно задание дважды. При остановке незавершённый прогон
+  отменяется, а оставшаяся `running`-строка закрывается при следующем старте
+  (reaper по `RETRAIN_TIMEOUT_SECONDS`).
+- Выключить целиком: `SCHEDULER_ENABLED=false` (строки `ml_schedule` не
+  трогаются). Состояние — в `GET /stats` -> `scheduler`.
+
+Добавить задание — например, переобучение одной категории каждую ночь в 04:30 UTC:
+
+```sql
+INSERT INTO ml_schedule (kind, name, cron_expr, args, enabled)
+VALUES ('retrain', 'nightly-fire-risk', '30 4 * * *', '{"category": "fire-risk"}', true);
+```
+
+`args` для `retrain` — это тело `POST /retrain`: `{"category": "<кат>"}` либо
+`{}` (все категории). Переобученные артефакты ложатся в writable-том
+`/app/models` (`ml_models`) работающего ml-service, а не в git: в репозитории
+(`ml-service/models/`, запекается в образ) лежит исходный набор, чтобы чистый
+клон поднимался сразу. Свежие модели попадают в репозиторий/образ только
+вручную — скопировать из тома и закоммитить.
 
 ## Требования
 
@@ -78,9 +128,13 @@ docker run --rm --network host -e LOG_LEVEL=DEBUG lct/ml-broker
 | `ML_BASE_URL` | `http://127.0.0.1:8000` | base URL ml-service |
 | `FORECAST_BATCH_CHUNK` | `300` | субъектов в одном `predict_all_batch` |
 | `PREDICT_TIMEOUT_SECONDS` | `600` | бюджет одного батч-вызова, с |
+| `RETRAIN_TIMEOUT_SECONDS` | `900` | таймаут `POST /retrain`, с (он же порог reaper'а зависших прогонов) |
 | `POLL_SECONDS` | `5` | опрос очереди, с |
 | `MAX_ATTEMPTS` | `3` | повторы батча |
 | `RETRY_BACKOFF_SECONDS` | `10` | backoff между повторами, с |
+| `SCHEDULER_ENABLED` | `true` | автоматическое переобучение из `ml_schedule` |
+| `SCHEDULER_POLL_SECONDS` | `30` | опрос `ml_schedule`, с |
+| `SCHEDULER_MISSED_GRACE_SECONDS` | `60` | насколько опоздавшее задание ещё запускать, с |
 | `HEALTH_PORT` | `8080` | `/healthz` |
 | `LOG_LEVEL` | `INFO` | `DEBUG`/`INFO`/`WARNING` |
 | `APP_SERVICE_CALLBACK_URL` / `APP_SERVICE_LOGIN` / `APP_SERVICE_PASSWORD` | `http://app-service:8081/api/v1/forecasts/notify` / `lct` / пусто | callback в app-service (опционально) |

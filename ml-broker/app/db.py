@@ -4,7 +4,7 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Any
+from typing import Any, Callable
 
 import asyncpg
 
@@ -54,6 +54,18 @@ class QueueRow:
     forecast_journal_id: str | None = None
     forecast_name: str | None = None
     dispatcher_object_id: int | None = None
+
+
+@dataclass
+class ScheduleJob:
+    """One due row of ``ml_schedule`` that the scheduler decided to run."""
+
+    id: str
+    kind: str
+    name: str
+    cron_expr: str
+    args: dict[str, Any]
+    next_run_at: datetime | None = None
 
 
 class Db:
@@ -285,3 +297,88 @@ class Db:
                 "UPDATE forecast_journal SET status='done', end_composition_time=now() WHERE id=$1",
                 journal_id,
             )
+
+    # ---- ml_schedule: the automatic retrain driver --------------------------
+
+    async def claim_due_jobs(
+        self, plan: Callable[[dict[str, Any]], tuple[datetime, bool]]
+    ) -> list[ScheduleJob]:
+        """Claim every due schedule row, in one transaction.
+
+        ``FOR UPDATE SKIP LOCKED`` combined with doing the update in the same
+        transaction is what keeps two broker replicas from firing the same
+        occurrence. ``plan`` decides each row's next occurrence and whether it
+        should run (missed jobs and unsupported kinds are advanced without
+        running); ``last_run_at`` is only touched for rows that actually run.
+        """
+        jobs: list[ScheduleJob] = []
+        async with self._pool.acquire() as conn:
+            async with conn.transaction():
+                rows = await conn.fetch(
+                    """SELECT id, kind, name, cron_expr, args, last_run_at, next_run_at
+                         FROM ml_schedule
+                        WHERE enabled AND (next_run_at IS NULL OR next_run_at <= now())
+                        ORDER BY next_run_at NULLS FIRST, name
+                          FOR UPDATE SKIP LOCKED"""
+                )
+                updates: list[tuple[Any, ...]] = []
+                for row in rows:
+                    next_run, fire = plan(dict(row))
+                    updates.append((row["id"], next_run, fire))
+                    if fire:
+                        jobs.append(
+                            ScheduleJob(
+                                id=str(row["id"]),
+                                kind=row["kind"],
+                                name=row["name"],
+                                cron_expr=row["cron_expr"],
+                                args=_json(row["args"]) or {},
+                                next_run_at=next_run,
+                            )
+                        )
+                if updates:
+                    await conn.executemany(
+                        """UPDATE ml_schedule
+                              SET next_run_at = $2,
+                                  last_run_at = CASE WHEN $3 THEN now() ELSE last_run_at END
+                            WHERE id = $1""",
+                        updates,
+                    )
+        return jobs
+
+    async def start_retrain_run(self, category: str | None) -> str:
+        """Open a ``ml_retrain_runs`` row (status 'running'); returns its id."""
+        async with self._pool.acquire() as conn:
+            row = await conn.fetchrow(
+                """INSERT INTO ml_retrain_runs (category, status)
+                   VALUES ($1, 'running') RETURNING id""",
+                category,
+            )
+        return str(row["id"])
+
+    async def finish_retrain_run(self, run_id: str, status: str, metrics: dict[str, Any]) -> None:
+        async with self._pool.acquire() as conn:
+            await conn.execute(
+                """UPDATE ml_retrain_runs SET finished_at=now(), status=$2, metrics=$3::jsonb
+                    WHERE id=$1 AND status='running'""",
+                run_id, status, json.dumps(metrics, default=str),
+            )
+
+    async def fail_stale_retrain_runs(self, older_than_seconds: float) -> int:
+        """Close runs left 'running' by a restart (mirrors requeue_orphans).
+
+        Without this, killing the broker mid-retrain would leave a row running
+        forever and the history in ``ml_retrain_runs`` would lie.
+        """
+        async with self._pool.acquire() as conn:
+            result = await conn.execute(
+                """UPDATE ml_retrain_runs
+                      SET status='failed', finished_at=now(),
+                          metrics=COALESCE(metrics, '{}'::jsonb)
+                                  || jsonb_build_object('error',
+                                       'abandoned: broker restarted while running')
+                    WHERE status='running'
+                      AND started_at < now() - make_interval(secs => $1)""",
+                older_than_seconds,
+            )
+        return int(result.rsplit(" ", 1)[-1]) if result else 0

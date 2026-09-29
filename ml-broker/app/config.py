@@ -21,6 +21,13 @@ def _env_int(name: str, default: int) -> int:
         return default
 
 
+def _env_bool(name: str, default: bool) -> bool:
+    raw = (os.environ.get(name) or "").strip().lower()
+    if not raw:
+        return default
+    return raw not in ("0", "false", "no", "off")
+
+
 def dsn_to_kwargs(dsn: str) -> dict[str, Any]:
     """Normalize a DB_DSN into asyncpg.create_pool keyword arguments.
 
@@ -94,6 +101,24 @@ class Config:
     )
     retrain_timeout_seconds: float = field(
         default_factory=lambda: float(os.environ.get("RETRAIN_TIMEOUT_SECONDS", "900"))
+    )
+    # Automatic retraining from ml_schedule. Disable to run the broker as a
+    # pure prediction consumer (the schedule rows stay untouched).
+    scheduler_enabled: bool = field(
+        default_factory=lambda: _env_bool("SCHEDULER_ENABLED", True)
+    )
+    # How often ml_schedule is polled for due rows. The seeded schedules are
+    # hourly/daily, so this only bounds how late a job may start.
+    scheduler_poll_seconds: float = field(
+        default_factory=lambda: float(os.environ.get("SCHEDULER_POLL_SECONDS", "30"))
+    )
+    # A job due longer ago than this was missed while the broker was down: it is
+    # skipped (not run late) and rescheduled. Cron expressions are interpreted
+    # in UTC — the whole stack stores timestamptz.
+    scheduler_missed_grace_seconds: float = field(
+        default_factory=lambda: float(
+            os.environ.get("SCHEDULER_MISSED_GRACE_SECONDS", "60")
+        )
     )
     http_timeout_seconds: float = field(
         default_factory=lambda: float(os.environ.get("HTTP_TIMEOUT_SECONDS", "30"))

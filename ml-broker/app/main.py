@@ -4,6 +4,7 @@ One asyncio process:
   - Db pool + orphan recovery
   - NotifierWorker (LISTEN lct_ml_forecast -> wake)
   - QueueWorker (journal -> queue -> /predict_all_batch -> forecast_results)
+  - SchedulerWorker (ml_schedule -> POST /retrain -> ml_retrain_runs)
   - tiny HTTP server with /healthz on HEALTH_PORT
 
 Graceful shutdown on SIGINT/SIGTERM.
@@ -23,6 +24,7 @@ from .db import Db
 from .log import configure, get_logger
 from .notifier import NotifierWorker
 from .queue_worker import QueueWorker
+from .scheduler_worker import SchedulerWorker
 
 
 log = get_logger(__name__)
@@ -52,13 +54,16 @@ async def main() -> None:
     recovered = await db.requeue_orphans()
     if recovered:
         log.info("orphan recovery", requeued=recovered)
+    stale_runs = await db.fail_stale_retrain_runs(cfg.retrain_timeout_seconds)
+    if stale_runs:
+        log.info("stale retrain runs closed", count=stale_runs)
 
     client = httpx.AsyncClient(timeout=cfg.http_timeout_seconds)
     notifier = NotifierWorker(pool, cfg, wake)
     worker = QueueWorker(db, client, cfg, wake)
+    scheduler = SchedulerWorker(db, client, cfg)
 
-
-    health = HealthServer(cfg.health_host, cfg.health_port, worker, notifier)
+    health = HealthServer(cfg.health_host, cfg.health_port, worker, notifier, scheduler)
     try:
         await health.start()
     except OSError as exc:
@@ -69,6 +74,10 @@ async def main() -> None:
     async with client:
         await notifier.start()
         await worker.start()
+        if cfg.scheduler_enabled:
+            await scheduler.start()
+        else:
+            log.info("scheduler disabled", env="SCHEDULER_ENABLED=false")
 
         STATE["status"] = "running"
         log.info("ml-broker running")
@@ -81,6 +90,7 @@ async def main() -> None:
         await stop_event.wait()
 
     log.info("shutting down")
+    await scheduler.stop()
     await worker.stop()
 
     await notifier.stop()
@@ -93,11 +103,19 @@ async def main() -> None:
 class HealthServer:
     """Minimal asyncio HTTP server exposing /healthz and /stats."""
 
-    def __init__(self, host: str, port: int, worker: QueueWorker, notifier: NotifierWorker) -> None:
+    def __init__(
+        self,
+        host: str,
+        port: int,
+        worker: QueueWorker,
+        notifier: NotifierWorker,
+        scheduler: SchedulerWorker | None = None,
+    ) -> None:
         self._host = host
         self._port = port
         self._worker = worker
         self._notifier = notifier
+        self._scheduler = scheduler
         self._server: asyncio.base_events.Server | None = None
 
     async def start(self) -> None:
@@ -131,6 +149,7 @@ class HealthServer:
                             "queue": self._worker.stats,
                             "notifier_connected": self._notifier.connected,
                             "notifier_reconnects": self._notifier.reconnects,
+                            "scheduler": self._scheduler.stats if self._scheduler else None,
                             "now": datetime.now(timezone.utc).isoformat(),
                         }
                     ).encode()
