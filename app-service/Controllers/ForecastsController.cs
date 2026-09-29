@@ -163,7 +163,8 @@ public sealed class ForecastsController(
                         .Select(value => new ForecastChannelValueResponse(
                             value.ChannelId,
                             value.Category,
-                            value.Value))
+                            value.Value,
+                            value.SensorName))
                         .ToArray()))
                 .ToArray()));
     }

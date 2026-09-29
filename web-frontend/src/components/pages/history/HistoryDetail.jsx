@@ -387,7 +387,7 @@ export default function HistoryDetail() {
               <ul>
                 {formattedForecastValues.map((item) => (
                   <li key={`${item.channelId}-${item.category}`}>
-                    {item.channelId} — {forecastCategoryLabel(item.category)}: {item.displayValue}
+                    {item.displayLabel} — {forecastCategoryLabel(item.category)}: {item.displayValue}
                   </li>
                 ))}
               </ul>

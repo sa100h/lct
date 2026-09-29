@@ -179,6 +179,10 @@ public sealed class ForecastRunServiceTests
             CancellationToken cancellationToken = default)
             => Task.FromResult(Snapshot);
 
+        public Task<IReadOnlyDictionary<int, string>> GetNamesByIdsAsync(
+            IReadOnlyCollection<int> channelIds,
+            CancellationToken cancellationToken = default)
+            => throw new NotSupportedException();
     }
 
     private sealed class FixedTimeProvider(DateTimeOffset now) : TimeProvider

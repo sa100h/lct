@@ -38,8 +38,15 @@ export function formatForecastValueList(values) {
   }
   return [...values]
     .sort(compareForecastValues)
-    .map((item) => ({
-      ...item,
-      displayValue: Number(item.value).toFixed(2),
-    }))
+    .map((item) => {
+      const sensorName =
+        typeof item.sensorName === 'string' && item.sensorName.trim() !== ''
+          ? item.sensorName
+          : item.channelId
+      return {
+        ...item,
+        displayValue: Number(item.value).toFixed(2),
+        displayLabel: `${sensorName} (${item.channelId})`,
+      }
+    })
 }

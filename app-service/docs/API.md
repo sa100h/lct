@@ -417,7 +417,8 @@ Query:
 
 - `hasResult` — есть строка `forecast_results` для объекта.
 - `forecastValues` — только каналы с числом `value`. `unpredictable` и записи без
-  числа не входят.
+  числа не входят. `sensorName` — `sensor_channels.sensor_name`; нет канала в БД —
+  тот же текст, что `channelId`.
 - `hasHighRisk`: без строки или без чисел → `null`; иначе `true`, если хотя бы
   одно `value` ≥ `Forecast:RiskThreshold` (по умолчанию `0.5`, env
   `Forecast__RiskThreshold`), иначе `false`.
@@ -468,7 +469,7 @@ Query:
       "isErroneous": true,
       "hasResult": true,
       "forecastValues": [
-        { "channelId": "120578", "category": "fire-risk", "value": 0.81 }
+        { "channelId": "120578", "category": "fire-risk", "value": 0.81, "sensorName": "ДУ" }
       ]
     }
   ]

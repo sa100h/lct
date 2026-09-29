@@ -9,4 +9,8 @@ public interface IForecastChannelRepository
         DateTimeOffset from,
         DateTimeOffset to,
         CancellationToken cancellationToken = default);
+
+    Task<IReadOnlyDictionary<int, string>> GetNamesByIdsAsync(
+        IReadOnlyCollection<int> channelIds,
+        CancellationToken cancellationToken = default);
 }

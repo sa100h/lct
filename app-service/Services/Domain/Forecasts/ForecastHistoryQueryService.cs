@@ -7,6 +7,7 @@ public sealed class ForecastHistoryQueryService(
     IForecastJournalRepository journal,
     IDispatcherObjectRepository objects,
     IForecastResultRepository results,
+    IForecastChannelRepository channels,
     ForecastOptions forecast) : IForecastHistoryQueryService
 {
     public const int MaxPageSize = 20;
@@ -63,30 +64,39 @@ public sealed class ForecastHistoryQueryService(
 
         var all = await objects.GetAllWithDescendantStatusesAsync(cancellationToken);
         var includedIds = ForecastJournalTree.AllowedIds(header.DispatcherObjectIds, all);
-        var selected = all.Where(item => includedIds.Contains(item.Id));
+        var selected = all.Where(item => includedIds.Contains(item.Id)).ToArray();
         var rows = await results.ListByJournalAsync(id, cancellationToken);
-
-        var mapped = selected
+        var parsedRows = selected
             .Select(item =>
             {
                 rows.TryGetValue(item.Id, out var row);
-                var hasResult = row is not null;
                 var parsed = ForecastRisk.Parse(row?.Description, forecast.RiskThreshold);
                 var erroneous = row?.IsErroneous == true;
-                var risk = erroneous ? false : parsed.HighRisk;
+                return (item, row, parsed, erroneous);
+            })
+            .ToArray();
+        var names = await channels.GetNamesByIdsAsync(
+            ForecastChannelNames.NumericIds(parsedRows.SelectMany(entry => entry.parsed.Values)),
+            cancellationToken);
+
+        var mapped = parsedRows
+            .Select(entry =>
+            {
+                var hasResult = entry.row is not null;
+                var risk = entry.erroneous ? false : entry.parsed.HighRisk;
                 return new ForecastHistoryObject(
-                    item.Id,
-                    item.ParentId,
-                    item.Name,
-                    item.Latitude,
-                    item.Longitude,
-                    item.Statuses,
+                    entry.item.Id,
+                    entry.item.ParentId,
+                    entry.item.Name,
+                    entry.item.Latitude,
+                    entry.item.Longitude,
+                    entry.item.Statuses,
                     risk,
-                    item.OwnStatuses,
-                    item.OwnChannelCount,
-                    erroneous,
+                    entry.item.OwnStatuses,
+                    entry.item.OwnChannelCount,
+                    entry.erroneous,
                     hasResult,
-                    parsed.Values);
+                    ForecastChannelNames.Attach(entry.parsed.Values, names));
             })
             .ToArray();
 

@@ -81,6 +81,36 @@ public sealed class ForecastHistoryQueryServiceTests
     }
 
     [Fact]
+    public async Task GetByIdAsync_AttachesSensorNamesFromChannelRepository()
+    {
+        var id = Guid.NewGuid();
+        var journal = new StubForecastJournalRepository
+        {
+            Header = new ForecastHistoryHeader(id, DateTimeOffset.UtcNow, "admin.test", null, null, "pending", null, null, [1]),
+        };
+        var rows = new Dictionary<int, ForecastJournalResult>
+        {
+            [1] = new("""{"channels":{"196623":{"infrastructure-wear":{"value":0.59}},"196624":{"infrastructure-wear":{"value":0.4}}}}""", false),
+        };
+        var channels = new StubForecastChannelRepository
+        {
+            Names = new Dictionary<int, string> { [196623] = "ДУ" },
+        };
+        var service = CreateService(
+            journal,
+            new StubDispatcherObjectRepository([Object(1)]),
+            rows,
+            channels: channels);
+
+        var detail = await service.GetByIdAsync(id, TestContext.Current.CancellationToken);
+
+        Assert.Equal([196623, 196624], channels.LastRequestedIds);
+        var values = detail!.Objects.Single().ForecastValues;
+        Assert.Equal("ДУ", values.Single(item => item.ChannelId == "196623").SensorName);
+        Assert.Equal("196624", values.Single(item => item.ChannelId == "196624").SensorName);
+    }
+
+    [Fact]
     public async Task GetByIdAsync_ReturnsNullWhenMissing()
     {
         var service = CreateService(
@@ -272,15 +302,38 @@ public sealed class ForecastHistoryQueryServiceTests
         IForecastJournalRepository journal,
         IDispatcherObjectRepository objects,
         IReadOnlyDictionary<int, ForecastJournalResult>? rows = null,
-        double threshold = 0.5)
+        double threshold = 0.5,
+        IForecastChannelRepository? channels = null)
         => new(
             journal,
             objects,
             new StubForecastResultRepository(rows ?? new Dictionary<int, ForecastJournalResult>()),
+            channels ?? new StubForecastChannelRepository(),
             new ForecastOptions { RiskThreshold = threshold });
 
     private static DispatcherObjectInfo Object(int id)
         => new(id, null, $"o{id}", 1, "district", 37.45, 55.6, [], 0, [], 0);
+
+    private sealed class StubForecastChannelRepository : IForecastChannelRepository
+    {
+        public IReadOnlyDictionary<int, string> Names { get; init; } = new Dictionary<int, string>();
+        public IReadOnlyList<int>? LastRequestedIds { get; private set; }
+
+        public Task<ForecastChannelSnapshot> GetLatestForObjectsAsync(
+            IReadOnlyCollection<int>? dispatcherObjectIds,
+            DateTimeOffset from,
+            DateTimeOffset to,
+            CancellationToken cancellationToken = default)
+            => throw new NotSupportedException();
+
+        public Task<IReadOnlyDictionary<int, string>> GetNamesByIdsAsync(
+            IReadOnlyCollection<int> channelIds,
+            CancellationToken cancellationToken = default)
+        {
+            LastRequestedIds = [.. channelIds];
+            return Task.FromResult(Names);
+        }
+    }
 
     private sealed class StubDispatcherObjectRepository(
         IReadOnlyList<DispatcherObjectInfo> result) : IDispatcherObjectRepository

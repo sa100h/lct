@@ -68,6 +68,15 @@ test('formatForecastValueList always uses two decimal places', () => {
   assert.equal(result[0].value, 0.8)
 })
 
+test('formatForecastValueList builds name and id label', () => {
+  const result = formatForecastValueList([
+    { channelId: '196623', category: 'infrastructure-wear', value: 0.59, sensorName: 'ДУ' },
+    { channelId: '196624', category: 'infrastructure-wear', value: 0.4 },
+  ])
+  assert.equal(result[0].displayLabel, 'ДУ (196623)')
+  assert.equal(result[1].displayLabel, '196624 (196624)')
+})
+
 test('formatForecastValueList returns empty for missing or empty input', () => {
   assert.deepEqual(formatForecastValueList(undefined), [])
   assert.deepEqual(formatForecastValueList(null), [])
