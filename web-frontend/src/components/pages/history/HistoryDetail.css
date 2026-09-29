@@ -54,6 +54,22 @@
   margin-top: 0;
 }
 
+.history-action-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.history-action-dot-erroneous {
+  background: #fa8c16;
+}
+
+.history-action-dot-approved {
+  background: #52c41a;
+}
+
 .history-detail-check-tree {
   width: 100%;
   max-height: 240px;

@@ -13,6 +13,7 @@ import {
   Tree,
   message,
 } from 'antd'
+import { PlusOutlined } from '@ant-design/icons'
 import { Link, useParams } from 'react-router-dom'
 import { useSelector } from 'react-redux'
 import { AuthHttpError } from '@/api/auth.js'
@@ -283,9 +284,12 @@ export default function HistoryDetail() {
         </div>
         <div className="history-detail-actions">
           {canRequest ? (
-            <Button onClick={() => void openRequest()}>Создать заявку</Button>
+            <Button icon={<PlusOutlined />} onClick={() => void openRequest()}>
+              Создать заявку
+            </Button>
           ) : null}
           <Button
+            icon={<span className="history-action-dot history-action-dot-erroneous" />}
             onClick={() => {
               setErroneousError(null)
               setErroneousKeys([])
@@ -296,6 +300,7 @@ export default function HistoryDetail() {
           </Button>
           {detail.status === 'done' ? (
             <Button
+              icon={<span className="history-action-dot history-action-dot-approved" />}
               onClick={() => {
                 setApproveError(null)
                 setApproveOpen(true)

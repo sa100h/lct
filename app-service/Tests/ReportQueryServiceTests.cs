@@ -40,8 +40,8 @@ public sealed class ReportQueryServiceTests
         Assert.Equal([1, 0, 3], body.Data.RequestsByStatus.Select(item => item.Count));
         Assert.Equal([2, 0, 0], body.Data.AlarmsByDay.Select(item => item.Count));
         Assert.Equal([0, 0, 4], body.Data.RequestsByDay.Select(item => item.Count));
-        Assert.Equal(["pending", "running", "done"], body.Data.ForecastsByStatus.Select(item => item.Status));
-        Assert.Equal([0, 0, 1], body.Data.ForecastsByStatus.Select(item => item.Count));
+        Assert.Equal(["pending", "running", "done", "error", "cancelled", "approved"], body.Data.ForecastsByStatus.Select(item => item.Status));
+        Assert.Equal([0, 0, 1, 0, 0, 0], body.Data.ForecastsByStatus.Select(item => item.Count));
         Assert.Equal(new DateTimeOffset(2026, 9, 28, 12, 0, 0, TimeSpan.Zero), doc.Header.GeneratedAt);
     }
 

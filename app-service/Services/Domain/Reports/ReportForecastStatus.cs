@@ -8,6 +8,9 @@ public static class ReportForecastStatus
             "pending" => "Ожидание",
             "running" => "В работе",
             "done" => "Готово",
+            "error" => "Ошибка",
+            "cancelled" => "Отменён",
+            "approved" => "Обработан",
             _ => status,
         };
 }

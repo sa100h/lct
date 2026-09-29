@@ -50,11 +50,7 @@ public sealed class NpgsqlDashboardFeedRepository(string connectionString) : IDa
         await using var connection = new NpgsqlConnection(connectionString);
         await connection.OpenAsync(cancellationToken);
         await using var command = new NpgsqlCommand("""
-            SELECT CASE
-                WHEN j.end_composition_time IS NOT NULL THEN 'done'
-                WHEN j.start_composition_time IS NOT NULL THEN 'running'
-                ELSE 'pending'
-            END, COUNT(*)::int
+            SELECT j.status, COUNT(*)::int
             FROM forecast_journal j
             WHERE j.creation_time >= @from AND j.creation_time < @to
             GROUP BY 1

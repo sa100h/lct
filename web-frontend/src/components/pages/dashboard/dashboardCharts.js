@@ -2,6 +2,9 @@ export const CHART_COLOR = {
   pending: '#1677ff',
   running: '#fa8c16',
   done: '#52c41a',
+  error: '#ff4d4f',
+  cancelled: '#8c8c8c',
+  approved: '#13c2c2',
   Новая: '#1677ff',
   'В работе': '#fa8c16',
   Закрыта: '#52c41a',
@@ -11,17 +14,23 @@ export const CHART_COLOR = {
 }
 
 export const REQUEST_STATUS_DOMAIN = ['Новая', 'В работе', 'Закрыта']
-export const REQUEST_STATUS_RANGE = [
-  CHART_COLOR.Новая,
-  CHART_COLOR['В работе'],
-  CHART_COLOR.Закрыта,
-]
+export const REQUEST_STATUS_RANGE = REQUEST_STATUS_DOMAIN.map((name) => CHART_COLOR[name])
 
-export const FORECAST_STATUS_DOMAIN = ['Ожидание', 'В работе', 'Готово']
+export const FORECAST_STATUS_DOMAIN = [
+  'Ожидание',
+  'В работе',
+  'Готово',
+  'Ошибка',
+  'Отменён',
+  'Обработан',
+]
 export const FORECAST_STATUS_RANGE = [
   CHART_COLOR.pending,
   CHART_COLOR.running,
   CHART_COLOR.done,
+  CHART_COLOR.error,
+  CHART_COLOR.cancelled,
+  CHART_COLOR.approved,
 ]
 
 export const OBJECT_TONE_DOMAIN = ['В норме', 'Отклонения']
@@ -35,7 +44,7 @@ export function cartesianOption({ categories, values, series }) {
     ? values.map((value, index) => ({
         value,
         itemStyle: {
-          color: series.colors[index],
+          color: series.colors[index] ?? CHART_COLOR.cancelled,
           borderRadius: [6, 6, 0, 0],
         },
       }))
@@ -108,7 +117,7 @@ export function pieOption({ items, colors, centerLabel }) {
         data: items.map((item, index) => ({
           name: item.name,
           value: item.count,
-          itemStyle: { color: colors[index] },
+          itemStyle: { color: colors[index] ?? CHART_COLOR.cancelled },
         })),
       },
     ],

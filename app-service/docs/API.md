@@ -247,7 +247,10 @@ curl http://localhost:8080/health
   "forecastsByStatus": [
     { "status": "pending", "count": 2 },
     { "status": "running", "count": 0 },
-    { "status": "done", "count": 6 }
+    { "status": "done", "count": 6 },
+    { "status": "error", "count": 1 },
+    { "status": "cancelled", "count": 0 },
+    { "status": "approved", "count": 2 }
   ]
 }
 ```
@@ -257,12 +260,14 @@ curl http://localhost:8080/health
 
 Ряды `alarmsByDay` и `requestsByDay` всегда длины 14; дни без данных —
 `count: 0`. `date` — `yyyy-MM-dd` UTC. Тревоги: `events_log.is_alarm`.
-Заявки по дням: `requests.created_at`. `requestsByStatus` — три имени из
-`request_statuses` (нули допустимы). `requestsTotal` — сумма этих трёх.
+Заявки по дням: `requests.created_at`. `requestsByStatus` — все имена из
+`request_statuses` в порядке «Новая», «В работе», «Закрыта», затем прочие
+(нули допустимы). `requestsTotal` — сумма этих рядов.
 `forecastsByStatus` — итог за те же 14 дней по `forecast_journal.creation_time`,
-не ряд по дням; три ключа `pending` / `running` / `done` (нули допустимы).
+не ряд по дням; ключи `pending` / `running` / `done` / `error` / `cancelled` /
+`approved` (нули допустимы), затем неизвестные значения колонки.
 
-Статус прогноза: `pending` (нет start/end composition), `running` (есть start, нет end), `done` (есть end).
+Статус прогноза на дашборде — колонка `forecast_journal.status`.
 
 **Пример**
 

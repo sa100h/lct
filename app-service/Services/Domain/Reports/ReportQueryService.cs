@@ -155,7 +155,9 @@ public sealed class ReportQueryService(
         IEnumerable<ReportStatusCount> rows)
     {
         var map = rows.ToDictionary(row => row.Status, row => row.Count, StringComparer.Ordinal);
+        var known = new HashSet<string>(order, StringComparer.Ordinal);
         return order
+            .Concat(map.Keys.Where(name => !known.Contains(name)))
             .Select(name => new ReportStatusCount(name, map.GetValueOrDefault(name)))
             .ToArray();
     }

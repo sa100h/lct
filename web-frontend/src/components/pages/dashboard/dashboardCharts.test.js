@@ -44,3 +44,11 @@ test('pieOption maps names and optional center label', () => {
   assert.equal(option.series[0].data[0].value, 4)
   assert.equal(option.title.text, 'Всего: 9')
 })
+
+test('pieOption falls back when a color is missing', () => {
+  const option = pieOption({
+    items: [{ name: 'Отложена', count: 1 }],
+    colors: [],
+  })
+  assert.equal(option.series[0].data[0].itemStyle.color, '#8c8c8c')
+})

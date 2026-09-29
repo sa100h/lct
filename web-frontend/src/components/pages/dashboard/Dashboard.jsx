@@ -6,9 +6,7 @@ import { getDashboard } from '@/api/dashboard.js'
 import { FORECAST_STATUS_LABEL } from '@/components/pages/history/forecastStatusTag.js'
 import {
   CHART_COLOR,
-  FORECAST_STATUS_RANGE,
   OBJECT_TONE_RANGE,
-  REQUEST_STATUS_RANGE,
   cartesianOption,
   formatDayLabel,
   hasCounts,
@@ -134,6 +132,10 @@ export default function Dashboard() {
       (data?.requestsByStatus ?? []).map((row) => ({ name: row.status, count: row.count })),
     [data?.requestsByStatus],
   )
+  const requestPieColors = useMemo(
+    () => requestPieItems.map((item) => CHART_COLOR[item.name] ?? CHART_COLOR.cancelled),
+    [requestPieItems],
+  )
   const objectPieItems = useMemo(
     () => [
       { name: 'В норме', count: data?.objects?.normal ?? 0 },
@@ -147,6 +149,13 @@ export default function Dashboard() {
         name: FORECAST_STATUS_LABEL[row.status] ?? row.status,
         count: row.count,
       })),
+    [data?.forecastsByStatus],
+  )
+  const forecastBarColors = useMemo(
+    () =>
+      (data?.forecastsByStatus ?? []).map(
+        (row) => CHART_COLOR[row.status] ?? CHART_COLOR.cancelled,
+      ),
     [data?.forecastsByStatus],
   )
 
@@ -199,7 +208,7 @@ export default function Dashboard() {
           <ChartOrEmpty empty={!hasCounts(data.requestsByStatus ?? [])}>
             <StatusPie
               items={requestPieItems}
-              colors={REQUEST_STATUS_RANGE}
+              colors={requestPieColors}
               centerLabel={`Всего: ${requestsTotal}`}
             />
           </ChartOrEmpty>
@@ -219,7 +228,7 @@ export default function Dashboard() {
 
         <DashboardSection title="Прогнозы за 14 дней">
           <ChartOrEmpty empty={!hasCounts(forecastsByStatus)}>
-            <StatusBar items={forecastBarItems} colors={FORECAST_STATUS_RANGE} />
+            <StatusBar items={forecastBarItems} colors={forecastBarColors} />
           </ChartOrEmpty>
         </DashboardSection>
       </div>

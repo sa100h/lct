@@ -7,6 +7,8 @@ test('forecastStatusTagColor maps known statuses', () => {
   assert.equal(forecastStatusTagColor('running'), 'orange')
   assert.equal(forecastStatusTagColor('done'), 'green')
   assert.equal(forecastStatusTagColor('approved'), 'cyan')
+  assert.equal(forecastStatusTagColor('error'), 'red')
+  assert.equal(forecastStatusTagColor('cancelled'), 'default')
 })
 
 test('forecastStatusTagColor falls back to default', () => {
@@ -20,4 +22,6 @@ test('FORECAST_STATUS_LABEL is Russian', () => {
   assert.equal(FORECAST_STATUS_LABEL.running, 'В работе')
   assert.equal(FORECAST_STATUS_LABEL.done, 'Готово')
   assert.equal(FORECAST_STATUS_LABEL.approved, 'Обработан')
+  assert.equal(FORECAST_STATUS_LABEL.error, 'Ошибка')
+  assert.equal(FORECAST_STATUS_LABEL.cancelled, 'Отменён')
 })

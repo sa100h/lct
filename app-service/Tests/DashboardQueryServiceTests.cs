@@ -58,10 +58,39 @@ public sealed class DashboardQueryServiceTests
         Assert.Equal([0, 3, 0], snapshot.RequestsByStatus.Select(item => item.Count));
         Assert.Equal(3, snapshot.RequestsTotal);
         Assert.Equal(
-            ["pending", "running", "done"],
+            ["pending", "running", "done", "error", "cancelled", "approved"],
             snapshot.ForecastsByStatus.Select(item => item.Status));
         Assert.All(snapshot.ForecastsByStatus, item => Assert.Equal(0, item.Count));
         Assert.Equal(14, snapshot.RequestsByDay.Count);
+    }
+
+    [Fact]
+    public async Task GetAsync_KeepsJournalStatusesAndUnknownRequestStatus()
+    {
+        var feeds = new StubDashboardFeedRepository
+        {
+            RequestStatuses =
+            [
+                new DashboardStatusCount("Новая", 1),
+                new DashboardStatusCount("Отложена", 2),
+            ],
+            ForecastStatuses =
+            [
+                new DashboardStatusCount("approved", 4),
+                new DashboardStatusCount("error", 1),
+            ],
+        };
+        var snapshot = await CreateService([], feeds).GetAsync(TestContext.Current.CancellationToken);
+
+        Assert.Equal(
+            ["Новая", "В работе", "Закрыта", "Отложена"],
+            snapshot.RequestsByStatus.Select(item => item.Status));
+        Assert.Equal([1, 0, 0, 2], snapshot.RequestsByStatus.Select(item => item.Count));
+        Assert.Equal(3, snapshot.RequestsTotal);
+        Assert.Equal(
+            ["pending", "running", "done", "error", "cancelled", "approved"],
+            snapshot.ForecastsByStatus.Select(item => item.Status));
+        Assert.Equal([0, 0, 0, 1, 0, 4], snapshot.ForecastsByStatus.Select(item => item.Count));
     }
 
     [Fact]

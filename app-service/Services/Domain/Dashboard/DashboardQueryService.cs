@@ -11,7 +11,8 @@ public sealed class DashboardQueryService(
     public const string NormalStatus = "Норма";
 
     public static readonly string[] RequestStatusOrder = ["Новая", "В работе", "Закрыта"];
-    public static readonly string[] ForecastStatusOrder = ["pending", "running", "done"];
+    public static readonly string[] ForecastStatusOrder =
+        ["pending", "running", "done", "error", "cancelled", "approved"];
 
     public async Task<DashboardSnapshot> GetAsync(CancellationToken cancellationToken = default)
     {
@@ -68,7 +69,9 @@ public sealed class DashboardQueryService(
         IEnumerable<DashboardStatusCount> rows)
     {
         var map = rows.ToDictionary(row => row.Status, row => row.Count, StringComparer.Ordinal);
+        var known = new HashSet<string>(order, StringComparer.Ordinal);
         return order
+            .Concat(map.Keys.Where(name => !known.Contains(name)))
             .Select(name => new DashboardStatusCount(name, map.GetValueOrDefault(name)))
             .ToArray();
     }
