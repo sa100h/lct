@@ -145,8 +145,6 @@
 
 .map-marker-active {
     transform: scale(1.25);
-    border-color: #fa8c16;
-    box-shadow: 0 0 0 3px #fa8c16, 0 0 0 1px rgba(0, 0, 0, 0.2);
 }
 
 .map-tree-node {
