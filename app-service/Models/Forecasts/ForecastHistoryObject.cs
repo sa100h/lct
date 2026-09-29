@@ -11,5 +11,6 @@ public sealed record ForecastHistoryObject(
     IReadOnlyList<string> OwnStatuses,
     int OwnChannelCount,
     bool IsErroneous,
+    bool IsRequestCreated,
     bool HasResult,
     IReadOnlyList<ForecastChannelValue> ForecastValues);

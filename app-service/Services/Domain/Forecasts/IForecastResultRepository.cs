@@ -10,6 +10,11 @@ public interface IForecastResultRepository
         Guid dispatcherUserId,
         IReadOnlyList<int> objectIds,
         CancellationToken cancellationToken = default);
+    Task MarkRequestCreatedAsync(
+        Guid journalId,
+        Guid dispatcherUserId,
+        IReadOnlyList<int> objectIds,
+        CancellationToken cancellationToken = default);
     Task<IReadOnlyDictionary<int, ForecastJournalResult>> ListByJournalAsync(
         Guid journalId,
         CancellationToken cancellationToken = default);

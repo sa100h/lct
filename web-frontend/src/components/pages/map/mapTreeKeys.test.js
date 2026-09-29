@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import { buildObjectTree } from '../prediction/buildObjectTree.js'
-import { ancestorKeys, mapForecastTone, mapOwnTone, mergeExpandedKeys, rootExpandedKeys, scrollTreeToKey, toMapMarkers } from './mapTreeKeys.js'
+import { ancestorKeys, flaggedObjectExpandedKeys, mapForecastTone, mapOwnTone, mergeExpandedKeys, rootExpandedKeys, scrollTreeToKey, toMapMarkers } from './mapTreeKeys.js'
 
 const objects = [
   { id: 5773, parentId: null, name: 'Район', longitude: 37.6, latitude: 55.7 },
@@ -71,6 +71,19 @@ test('toMapMarkers uses toneOf when given', () => {
 test('mergeExpandedKeys adds ancestors and keeps current', () => {
   const keys = mergeExpandedKeys(['5773'], objects, 5122)
   assert.deepEqual([...keys].sort(), ['5', '5773'].sort())
+})
+
+test('flaggedObjectExpandedKeys opens path to badge nodes', () => {
+  const flagged = [
+    { id: 5773, parentId: null, name: 'Район' },
+    { id: 5, parentId: 5773, name: 'объект Альфа', isErroneous: true },
+    { id: 5122, parentId: 5, name: 'ДУ', isRequestCreated: true },
+  ]
+  assert.deepEqual([...flaggedObjectExpandedKeys(flagged)].sort(), ['5', '5122', '5773'].sort())
+})
+
+test('flaggedObjectExpandedKeys is empty without flags', () => {
+  assert.deepEqual(flaggedObjectExpandedKeys(objects), [])
 })
 
 test('scrollTreeToKey defers scrollTo until after two animation frames', () => {

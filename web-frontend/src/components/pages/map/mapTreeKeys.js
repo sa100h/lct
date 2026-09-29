@@ -21,6 +21,20 @@ export function mergeExpandedKeys(current, objects, id) {
   return [...new Set([...(current ?? []), ...ancestorKeys(objects, id)])]
 }
 
+export function flaggedObjectExpandedKeys(objects) {
+  const keys = new Set()
+  for (const object of objects ?? []) {
+    if (!object.isErroneous && !object.isRequestCreated) {
+      continue
+    }
+    keys.add(String(object.id))
+    for (const key of ancestorKeys(objects, object.id)) {
+      keys.add(key)
+    }
+  }
+  return [...keys]
+}
+
 export function scrollTreeToKey(tree, key) {
   if (tree == null || key == null) {
     return

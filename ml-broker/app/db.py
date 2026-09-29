@@ -288,7 +288,7 @@ class Db:
                          forecast_name=EXCLUDED.forecast_name,
                          forecast_description=EXCLUDED.forecast_description,
                          user_dispatcher_id=EXCLUDED.user_dispatcher_id,
-                         is_erroneous=false, is_cancelled=false, created_at=now()""",
+                         created_at=now()""",
                     journal_id, name,
                     json.dumps(build_result_description(predictions, creation), ensure_ascii=False),
                     object_id, ML_BROKER_UUID,

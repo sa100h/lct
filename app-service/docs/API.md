@@ -425,6 +425,7 @@ Query:
 - `isErroneous` — `forecast_results.is_erroneous`; нет строки → `false`. Если
   `isErroneous` true, `hasHighRisk` всегда `false`. `forecastValues` всё равно
   отдаём, если есть числа.
+- `isRequestCreated` — `forecast_results.is_request_created`; нет строки → `false`.
 
 Поля в JSON не опускаются.
 
@@ -453,6 +454,7 @@ Query:
       "ownStatuses": ["Норма"],
       "ownChannelCount": 3,
       "isErroneous": false,
+      "isRequestCreated": false,
       "hasResult": false,
       "forecastValues": []
     },
@@ -467,6 +469,7 @@ Query:
       "ownStatuses": ["Норма"],
       "ownChannelCount": 1,
       "isErroneous": true,
+      "isRequestCreated": false,
       "hasResult": true,
       "forecastValues": [
         { "channelId": "120578", "category": "fire-risk", "value": 0.81, "sensorName": "ДУ" }

@@ -112,6 +112,13 @@ public sealed class ForecastErroneousServiceTests
             return Task.CompletedTask;
         }
 
+        public Task MarkRequestCreatedAsync(
+            Guid journalId,
+            Guid dispatcherUserId,
+            IReadOnlyList<int> objectIds,
+            CancellationToken cancellationToken = default)
+            => throw new NotSupportedException();
+
         public Task<IReadOnlyDictionary<int, ForecastJournalResult>> ListByJournalAsync(
             Guid journalId,
             CancellationToken cancellationToken = default)

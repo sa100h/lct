@@ -91,9 +91,9 @@ public sealed class ReportQueryServiceTests
             ],
             Results = new Dictionary<Guid, IReadOnlyList<ForecastJournalResult>>
             {
-                [highId] = [new("""{"channels":{"1":{"fire-risk":{"value":0.9}}}}""", false)],
-                [errId] = [new("""{"channels":{"1":{"fire-risk":{"value":0.9}}}}""", true)],
-                [noneId] = [new("""{"channels":{"1":{"fire-risk":{"status_code":"unpredictable"}}}}""", false)],
+                [highId] = [new("""{"channels":{"1":{"fire-risk":{"value":0.9}}}}""", false, false)],
+                [errId] = [new("""{"channels":{"1":{"fire-risk":{"value":0.9}}}}""", true, false)],
+                [noneId] = [new("""{"channels":{"1":{"fire-risk":{"status_code":"unpredictable"}}}}""", false, false)],
             },
         };
         var service = Create(feeds);

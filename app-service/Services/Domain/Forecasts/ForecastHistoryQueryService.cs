@@ -95,6 +95,7 @@ public sealed class ForecastHistoryQueryService(
                     entry.item.OwnStatuses,
                     entry.item.OwnChannelCount,
                     entry.erroneous,
+                    entry.row?.IsRequestCreated == true,
                     hasResult,
                     ForecastChannelNames.Attach(entry.parsed.Values, names));
             })

@@ -1,3 +1,3 @@
 namespace AppService.Models;
 
-public sealed record ForecastJournalResult(string Description, bool IsErroneous);
+public sealed record ForecastJournalResult(string Description, bool IsErroneous, bool IsRequestCreated);

@@ -90,7 +90,7 @@ public sealed class ForecastHistoryQueryServiceTests
         };
         var rows = new Dictionary<int, ForecastJournalResult>
         {
-            [1] = new("""{"channels":{"196623":{"infrastructure-wear":{"value":0.59}},"196624":{"infrastructure-wear":{"value":0.4}}}}""", false),
+            [1] = new("""{"channels":{"196623":{"infrastructure-wear":{"value":0.59}},"196624":{"infrastructure-wear":{"value":0.4}}}}""", false, false),
         };
         var channels = new StubForecastChannelRepository
         {
@@ -180,9 +180,9 @@ public sealed class ForecastHistoryQueryServiceTests
         };
         var rows = new Dictionary<int, ForecastJournalResult>
         {
-            [1] = new("""{"channels":{"a":{"fire-risk":{"value":0.9}}}}""", false),
-            [2] = new("""{"channels":{"a":{"fire-risk":{"value":0.1}}}}""", false),
-            [3] = new("{}", false),
+            [1] = new("""{"channels":{"a":{"fire-risk":{"value":0.9}}}}""", false, false),
+            [2] = new("""{"channels":{"a":{"fire-risk":{"value":0.1}}}}""", false, false),
+            [3] = new("{}", false, false),
         };
         var service = CreateService(
             journal,
@@ -212,7 +212,7 @@ public sealed class ForecastHistoryQueryServiceTests
         };
         var rows = new Dictionary<int, ForecastJournalResult>
         {
-            [1] = new("""{"channels":{"a":{"fire-risk":{"value":0.9}}}}""", true),
+            [1] = new("""{"channels":{"a":{"fire-risk":{"value":0.9}}}}""", true, false),
         };
         var service = CreateService(
             journal,
@@ -239,7 +239,7 @@ public sealed class ForecastHistoryQueryServiceTests
         };
         var rows = new Dictionary<int, ForecastJournalResult>
         {
-            [1] = new("""{"channels":{"x":{"fire-risk":{"status_code":"unpredictable"}}}}""", false),
+            [1] = new("""{"channels":{"x":{"fire-risk":{"status_code":"unpredictable"}}}}""", false, false),
         };
         var service = CreateService(
             journal,
@@ -251,6 +251,27 @@ public sealed class ForecastHistoryQueryServiceTests
         Assert.True(obj.HasResult);
         Assert.Null(obj.HasHighRisk);
         Assert.Empty(obj.ForecastValues);
+    }
+
+    [Fact]
+    public async Task GetByIdAsync_MapsIsRequestCreated()
+    {
+        var id = Guid.NewGuid();
+        var journal = new StubForecastJournalRepository
+        {
+            Header = new ForecastHistoryHeader(id, DateTimeOffset.UtcNow, "admin.test", null, null, "pending", null, null, [1, 2]),
+        };
+        var rows = new Dictionary<int, ForecastJournalResult>
+        {
+            [1] = new("{}", false, true),
+        };
+        var detail = await CreateService(
+                journal,
+                new StubDispatcherObjectRepository([Object(1), Object(2)]),
+                rows)
+            .GetByIdAsync(id, TestContext.Current.CancellationToken);
+        Assert.True(detail!.Objects[0].IsRequestCreated);
+        Assert.False(detail.Objects[1].IsRequestCreated);
     }
 
     [Fact]
@@ -355,6 +376,13 @@ public sealed class ForecastHistoryQueryServiceTests
             => throw new NotSupportedException();
 
         public Task MarkErroneousAsync(
+            Guid journalId,
+            Guid dispatcherUserId,
+            IReadOnlyList<int> objectIds,
+            CancellationToken cancellationToken = default)
+            => throw new NotSupportedException();
+
+        public Task MarkRequestCreatedAsync(
             Guid journalId,
             Guid dispatcherUserId,
             IReadOnlyList<int> objectIds,

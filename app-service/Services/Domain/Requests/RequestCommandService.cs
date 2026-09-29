@@ -5,7 +5,8 @@ namespace AppService.Services.Domain;
 public sealed class RequestCommandService(
     IRequestRepository requests,
     IForecastJournalRepository journal,
-    IDispatcherObjectRepository objects) : IRequestCommandService
+    IDispatcherObjectRepository objects,
+    IForecastResultRepository results) : IRequestCommandService
 {
     public const string MissingJournal = "Прогноз не найден.";
     public const string MissingTechnician = "Техник не найден.";
@@ -49,14 +50,21 @@ public sealed class RequestCommandService(
             throw new ArgumentException(MissingObject);
         }
 
-        return await requests.InsertAsync(
+        var objectIds = command.DispatcherObjectIds.Distinct().ToArray();
+        var id = await requests.InsertAsync(
             command.ForecastJournalId,
             description,
             dispatcherUserId,
             command.TechnicianId,
-            command.DispatcherObjectIds.Distinct().ToArray(),
+            objectIds,
             command.Priority,
             cancellationToken);
+        await results.MarkRequestCreatedAsync(
+            command.ForecastJournalId,
+            dispatcherUserId,
+            objectIds,
+            cancellationToken);
+        return id;
     }
 
     public async Task UpdateStatusAsync(

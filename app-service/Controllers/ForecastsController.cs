@@ -158,6 +158,7 @@ public sealed class ForecastsController(
                     item.OwnStatuses,
                     item.OwnChannelCount,
                     item.IsErroneous,
+                    item.IsRequestCreated,
                     item.HasResult,
                     item.ForecastValues
                         .Select(value => new ForecastChannelValueResponse(

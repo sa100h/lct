@@ -67,11 +67,3 @@
 .history-detail-check-tree .ant-tree {
   background: transparent;
 }
-
-.map-tree-erroneous {
-  margin-left: 6px;
-  font-size: 12px;
-  font-weight: 400;
-  color: #6b7280;
-  white-space: nowrap;
-}

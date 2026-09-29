@@ -15,6 +15,7 @@ function runErrorText(error) {
 export default function PredictionForm({ onRan }) {
   const [treeData, setTreeData] = useState([])
   const [checkedKeys, setCheckedKeys] = useState([])
+  const [expandedKeys, setExpandedKeys] = useState([])
   const [allObjects, setAllObjects] = useState(false)
   const [objectsLoading, setObjectsLoading] = useState(true)
   const [objectsError, setObjectsError] = useState(null)
@@ -66,6 +67,9 @@ export default function PredictionForm({ onRan }) {
         allObjects ? null : checkedKeys.map((key) => Number(key)),
       )
       setSuccessText(formatForecastStartedMessage(result.createdAt))
+      setExpandedKeys([])
+      setCheckedKeys([])
+      setAllObjects(false)
       onRan?.()
     } catch (error) {
       setRunError(runErrorText(error))
@@ -101,6 +105,8 @@ export default function PredictionForm({ onRan }) {
             disabled={allObjects}
             treeData={treeData}
             checkedKeys={checkedKeys}
+            expandedKeys={expandedKeys}
+            onExpand={(keys) => setExpandedKeys(keys)}
             onCheck={(keys) => setCheckedKeys(Array.isArray(keys) ? keys : keys.checked)}
           />
         )}

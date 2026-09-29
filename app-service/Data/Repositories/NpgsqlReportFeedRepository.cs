@@ -260,7 +260,7 @@ public sealed class NpgsqlReportFeedRepository(string connectionString) : IRepor
         await using var connection = new NpgsqlConnection(connectionString);
         await connection.OpenAsync(cancellationToken);
         await using var command = new NpgsqlCommand("""
-            SELECT forecast_journal_id, forecast_description::text, is_erroneous
+            SELECT forecast_journal_id, forecast_description::text, is_erroneous, is_request_created
             FROM forecast_results
             WHERE forecast_journal_id = ANY(@ids)
               AND dispatcher_object_id IS NOT NULL
@@ -280,7 +280,8 @@ public sealed class NpgsqlReportFeedRepository(string connectionString) : IRepor
 
             list.Add(new ForecastJournalResult(
                 reader.IsDBNull(1) ? "{}" : reader.GetString(1),
-                reader.GetBoolean(2)));
+                reader.GetBoolean(2),
+                !reader.IsDBNull(3) && reader.GetBoolean(3)));
         }
 
         return map.ToDictionary(

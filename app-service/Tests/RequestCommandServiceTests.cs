@@ -15,7 +15,7 @@ public sealed class RequestCommandServiceTests
         var requests = new RecordingRequestRepository { TechnicianOk = true };
         var journal = HeaderJournal(journalId, [2]);
         var objects = new StubObjects([Item(1, null), Item(2, 1)]);
-        var service = new RequestCommandService(requests, journal, objects);
+        var service = new RequestCommandService(requests, journal, objects, new RecordingForecastResultRepository());
 
         var id = await service.CreateAsync(
             dispatcherId,
@@ -27,6 +27,48 @@ public sealed class RequestCommandServiceTests
         Assert.Equal(dispatcherId, requests.DispatcherUserId);
         Assert.Equal([1, 2], requests.ObjectIds);
         Assert.Equal(2, requests.Priority);
+    }
+
+    [Fact]
+    public async Task CreateAsync_MarksRequestCreatedOnForecastResults()
+    {
+        var journalId = Guid.NewGuid();
+        var dispatcherId = Guid.NewGuid();
+        var requests = new RecordingRequestRepository { TechnicianOk = true };
+        var results = new RecordingForecastResultRepository();
+        var journal = HeaderJournal(journalId, [2]);
+        var objects = new StubObjects([Item(1, null), Item(2, 1)]);
+        var service = new RequestCommandService(requests, journal, objects, results);
+
+        await service.CreateAsync(
+            dispatcherId,
+            new CreateRequestCommand(journalId, [1, 2], "Утечка", 2, Guid.NewGuid()),
+            TestContext.Current.CancellationToken);
+
+        Assert.True(requests.Inserted);
+        Assert.Equal(journalId, results.JournalId);
+        Assert.Equal(dispatcherId, results.UserId);
+        Assert.Equal([1, 2], results.ObjectIds);
+    }
+
+    [Fact]
+    public async Task CreateAsync_RejectsMissingJournal_DoesNotMarkRequestCreated()
+    {
+        var requests = new RecordingRequestRepository { TechnicianOk = true };
+        var results = new RecordingForecastResultRepository();
+        var service = new RequestCommandService(
+            requests,
+            new StubJournal { Header = null },
+            new StubObjects([Item(5, null)]),
+            results);
+
+        await Assert.ThrowsAsync<KeyNotFoundException>(() => service.CreateAsync(
+            Guid.NewGuid(),
+            new CreateRequestCommand(Guid.NewGuid(), [5], "text", null, Guid.NewGuid()),
+            TestContext.Current.CancellationToken));
+
+        Assert.False(requests.Inserted);
+        Assert.Null(results.ObjectIds);
     }
 
     [Fact]
@@ -51,7 +93,8 @@ public sealed class RequestCommandServiceTests
         var service = new RequestCommandService(
             requests,
             new StubJournal { Header = null },
-            new StubObjects([Item(5, null)]));
+            new StubObjects([Item(5, null)]),
+            new RecordingForecastResultRepository());
 
         var exception = await Assert.ThrowsAsync<KeyNotFoundException>(() => service.CreateAsync(
             Guid.NewGuid(),
@@ -84,7 +127,8 @@ public sealed class RequestCommandServiceTests
         var service = new RequestCommandService(
             requests,
             HeaderJournal(Guid.NewGuid(), [2]),
-            new StubObjects([Item(1, null), Item(2, 1), Item(9, null)]));
+            new StubObjects([Item(1, null), Item(2, 1), Item(9, null)]),
+            new RecordingForecastResultRepository());
 
         var exception = await Assert.ThrowsAsync<ArgumentException>(() => service.CreateAsync(
             Guid.NewGuid(),
@@ -148,7 +192,11 @@ public sealed class RequestCommandServiceTests
     }
 
     private static RequestCommandService Create(RecordingRequestRepository requests, IReadOnlyList<int> objectIds)
-        => new(requests, HeaderJournal(Guid.NewGuid(), objectIds), new StubObjects([.. objectIds.Select(id => Item(id, null))]));
+        => new(
+            requests,
+            HeaderJournal(Guid.NewGuid(), objectIds),
+            new StubObjects([.. objectIds.Select(id => Item(id, null))]),
+            new RecordingForecastResultRepository());
 
     private static StubJournal HeaderJournal(Guid id, IReadOnlyList<int> objectIds)
         => new()
@@ -159,6 +207,40 @@ public sealed class RequestCommandServiceTests
 
     private static DispatcherObjectInfo Item(int id, int? parent)
         => new(id, parent, $"o{id}", 1, "district", 0, 0, [], 0, [], 0);
+
+    private sealed class RecordingForecastResultRepository : IForecastResultRepository
+    {
+        public Guid? JournalId { get; private set; }
+        public Guid? UserId { get; private set; }
+        public IReadOnlyList<int>? ObjectIds { get; private set; }
+
+        public Task<bool> JournalExistsAsync(Guid journalId, CancellationToken cancellationToken = default)
+            => throw new NotSupportedException();
+
+        public Task MarkErroneousAsync(
+            Guid journalId,
+            Guid dispatcherUserId,
+            IReadOnlyList<int> objectIds,
+            CancellationToken cancellationToken = default)
+            => throw new NotSupportedException();
+
+        public Task MarkRequestCreatedAsync(
+            Guid journalId,
+            Guid dispatcherUserId,
+            IReadOnlyList<int> objectIds,
+            CancellationToken cancellationToken = default)
+        {
+            JournalId = journalId;
+            UserId = dispatcherUserId;
+            ObjectIds = objectIds;
+            return Task.CompletedTask;
+        }
+
+        public Task<IReadOnlyDictionary<int, ForecastJournalResult>> ListByJournalAsync(
+            Guid journalId,
+            CancellationToken cancellationToken = default)
+            => throw new NotSupportedException();
+    }
 
     private sealed class RecordingRequestRepository : IRequestRepository
     {

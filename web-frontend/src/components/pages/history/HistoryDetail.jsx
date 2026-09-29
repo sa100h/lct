@@ -24,7 +24,7 @@ import {
 import { createRequest } from '@/api/requests.js'
 import { listUsersByRole } from '@/api/users.js'
 import { buildObjectTree } from '@/components/pages/prediction/buildObjectTree.js'
-import { mapForecastTone, mergeExpandedKeys, rootExpandedKeys, scrollTreeToKey, toMapMarkers } from '@/components/pages/map/mapTreeKeys.js'
+import { flaggedObjectExpandedKeys, mapForecastTone, mergeExpandedKeys, rootExpandedKeys, scrollTreeToKey, toMapMarkers } from '@/components/pages/map/mapTreeKeys.js'
 import { formatObjectCount } from '@/components/objectTree/formatObjectCount.js'
 import { forecastCategoryLabel, forecastResultHeadline, formatForecastValueList } from '@/components/pages/history/forecastResultCopy.js'
 import { FORECAST_STATUS_LABEL, forecastStatusTagColor } from '@/components/pages/history/forecastStatusTag.js'
@@ -89,7 +89,9 @@ export default function HistoryDetail() {
     setDetail(snapshot)
     setTreeData(tree)
     setMarkers(toMapMarkers(list, (item) => mapForecastTone(item.hasHighRisk)))
+    const flaggedKeys = flaggedObjectExpandedKeys(list)
     if (keepSelection) {
+      setExpandedKeys((current) => [...new Set([...(current ?? []), ...flaggedKeys])])
       setSelectedId((current) =>
         current != null && list.some((item) => item.id === current)
           ? current
@@ -99,7 +101,7 @@ export default function HistoryDetail() {
       setModalObject((current) =>
         current == null ? null : (list.find((item) => item.id === current.id) ?? null))
     } else {
-      setExpandedKeys(rootExpandedKeys(tree))
+      setExpandedKeys([...new Set([...rootExpandedKeys(tree), ...flaggedKeys])])
       setSelectedId(tree[0] ? Number(tree[0].key) : null)
     }
   }, [])
@@ -186,6 +188,7 @@ export default function HistoryDetail() {
       })
       setRequestOpen(false)
       message.success('Заявка создана')
+      await loadDetail({ showSpinner: false, keepSelection: true })
     } catch (caught) {
       setRequestError(
         caught instanceof AuthHttpError && caught.displayMessage
@@ -341,7 +344,7 @@ export default function HistoryDetail() {
                 setSelectedId(Number(keys[0]))
               }}
               titleRender={(node) => {
-                const current = objects.find((item) => String(item.id) === node.key)
+                const current = objects.find((item) => String(item.id) === String(node.key))
                 const tone = mapForecastTone(current?.hasHighRisk)
                 return (
                   <span
@@ -353,9 +356,8 @@ export default function HistoryDetail() {
                   >
                     <span className={`map-tree-dot map-tree-dot-${tone}`} />
                     <span className="map-tree-label">{node.title}</span>
-                    {current?.isErroneous ? (
-                      <span className="map-tree-erroneous">Помечен как ошибочный</span>
-                    ) : null}
+                    {current?.isErroneous ? <Tag color="orange">Ошибочный</Tag> : null}
+                    {current?.isRequestCreated ? <Tag color="blue">Заявка</Tag> : null}
                   </span>
                 )
               }}
@@ -381,7 +383,12 @@ export default function HistoryDetail() {
                 ? modalObject.statuses.join(', ')
                 : 'нет'}
             </p>
-            {modalObject.isErroneous ? <p>Помечен как ошибочный</p> : null}
+            {(modalObject.isErroneous || modalObject.isRequestCreated) ? (
+              <p>
+                {modalObject.isErroneous ? <Tag color="orange">Ошибочный</Tag> : null}
+                {modalObject.isRequestCreated ? <Tag color="blue">Заявка</Tag> : null}
+              </p>
+            ) : null}
             <p>{forecastResultHeadline(modalObject)}</p>
             {formattedForecastValues.length > 0 ? (
               <ul>
