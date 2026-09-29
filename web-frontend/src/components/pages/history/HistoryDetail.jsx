@@ -39,6 +39,8 @@ const MISSING_KEY_TEXT =
 const LOAD_ERROR_TEXT =
   'Не удалось загрузить Яндекс.Карты. Проверьте ключ, сеть и ограничения ключа по HTTP Referrer.'
 
+const HISTORY_MODAL_STYLE = { top: 24 }
+
 function formatWhen(value) {
   return new Date(value).toLocaleString('ru-RU')
 }
@@ -365,6 +367,7 @@ export default function HistoryDetail() {
         title={modalObject?.name}
         footer={null}
         onCancel={() => setModalObject(null)}
+        style={HISTORY_MODAL_STYLE}
       >
         {modalObject ? (
           <div className="history-detail-modal">
@@ -397,6 +400,7 @@ export default function HistoryDetail() {
         onCancel={() => setRequestOpen(false)}
         footer={null}
         destroyOnHidden
+        style={HISTORY_MODAL_STYLE}
       >
         {requestError ? <Alert type="error" showIcon message={requestError} /> : null}
         <Form form={form} layout="vertical" onFinish={(values) => void submitRequest(values)}>
@@ -450,6 +454,7 @@ export default function HistoryDetail() {
         onOk={() => void submitErroneous()}
         onCancel={() => setErroneousOpen(false)}
         destroyOnHidden
+        style={HISTORY_MODAL_STYLE}
       >
         {erroneousError ? <Alert type="error" showIcon message={erroneousError} /> : null}
         <div className="history-detail-check-tree">
@@ -469,6 +474,7 @@ export default function HistoryDetail() {
         onOk={() => void submitApprove()}
         onCancel={() => setApproveOpen(false)}
         destroyOnHidden
+        style={HISTORY_MODAL_STYLE}
       >
         {approveError ? <Alert type="error" showIcon message={approveError} /> : null}
         <p>Отметить прогноз как обработанный?</p>
