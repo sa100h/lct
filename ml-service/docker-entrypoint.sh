@@ -2,7 +2,8 @@
 # Seed the writable models directory from the models baked into the image.
 #
 # compose mounts the named volume ml_models at /app/models and that directory
-# has to stay WRITABLE — the scheduler's POST /retrain saves into it. So the
+# has to stay WRITABLE — POST /retrain saves into it, and a retrain must not
+# hit the read-only image layer. So the
 # real artifacts cannot sit in the read-only image layer at /app/models: they
 # are baked to /app/models-baked instead and copied here on first start.
 #

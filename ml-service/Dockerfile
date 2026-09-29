@@ -20,8 +20,8 @@ RUN pip install -r requirements.txt
 COPY ml-service/app ./app
 COPY ml-service/scripts ./scripts
 # The trained models ship INSIDE the image, but not at /app/models: compose
-# mounts the writable named volume ml_models there (the scheduler's
-# POST /retrain writes into it), and a volume would hide the image content.
+# mounts the writable named volume ml_models there (POST /retrain writes into
+# it), and a volume would hide the image content.
 # docker-entrypoint.sh copies these in whenever the volume has no meta.json
 # for a category, so a fresh deployment needs no manual podman cp.
 # ml-service/models/ holds only .gitkeep in a clean clone — the copy is then
