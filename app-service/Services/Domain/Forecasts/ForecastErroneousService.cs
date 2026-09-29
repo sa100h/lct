@@ -2,28 +2,41 @@ namespace AppService.Services.Domain;
 
 public sealed class ForecastErroneousService(
     IForecastResultRepository results,
+    IForecastJournalRepository journal,
     IDispatcherObjectRepository objects) : IForecastErroneousService
 {
     public const string MissingJournal = "Прогноз не найден.";
     public const string MissingObject = "Объект не найден.";
+    public const string EmptyObjects = "Выберите объекты.";
 
     public async Task MarkAsync(
         Guid journalId,
         Guid dispatcherUserId,
-        int dispatcherObjectId,
+        IReadOnlyList<int> dispatcherObjectIds,
         CancellationToken cancellationToken = default)
     {
-        if (!await results.JournalExistsAsync(journalId, cancellationToken))
+        if (dispatcherObjectIds is null || dispatcherObjectIds.Count == 0)
+        {
+            throw new ArgumentException(EmptyObjects);
+        }
+
+        var header = await journal.GetHeaderAsync(journalId, cancellationToken);
+        if (header is null)
         {
             throw new KeyNotFoundException(MissingJournal);
         }
 
-        var objectIds = await objects.GetSubtreeIdsAsync(dispatcherObjectId, cancellationToken);
-        if (objectIds.Count == 0)
+        var all = await objects.GetAllWithDescendantStatusesAsync(cancellationToken);
+        var allowed = ForecastJournalTree.AllowedIds(header.DispatcherObjectIds, all);
+        if (dispatcherObjectIds.Any(id => !allowed.Contains(id)))
         {
             throw new ArgumentException(MissingObject);
         }
 
-        await results.MarkErroneousAsync(journalId, dispatcherUserId, objectIds, cancellationToken);
+        await results.MarkErroneousAsync(
+            journalId,
+            dispatcherUserId,
+            dispatcherObjectIds.Distinct().ToArray(),
+            cancellationToken);
     }
 }

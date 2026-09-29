@@ -16,7 +16,7 @@ public sealed class ForecastHistoryQueryServiceTests
         {
             Rows =
             [
-                new ForecastHistoryListRow(id, created, "admin.test", null, null, 96),
+                new ForecastHistoryListRow(id, created, "admin.test", null, null, 96, "pending", null, null),
             ],
             Total = 1,
         };
@@ -33,6 +33,8 @@ public sealed class ForecastHistoryQueryServiceTests
         Assert.Equal("pending", item.Status);
         Assert.Equal("admin.test", item.AuthorLogin);
         Assert.Equal(96, item.ObjectCount);
+        Assert.Null(item.ApprovedByLogin);
+        Assert.Null(item.ApprovedAt);
         Assert.Equal(1, page.Total);
     }
 
@@ -56,7 +58,7 @@ public sealed class ForecastHistoryQueryServiceTests
         var created = new DateTimeOffset(2026, 9, 25, 10, 30, 0, TimeSpan.Zero);
         var journal = new StubForecastJournalRepository
         {
-            Header = new ForecastHistoryHeader(id, created, "admin.test", null, null, [2]),
+            Header = new ForecastHistoryHeader(id, created, "admin.test", null, null, "pending", null, null, [2]),
         };
         var service = CreateService(
             journal,
@@ -98,7 +100,7 @@ public sealed class ForecastHistoryQueryServiceTests
         var id = Guid.NewGuid();
         var journal = new StubForecastJournalRepository
         {
-            Header = new ForecastHistoryHeader(id, DateTimeOffset.UtcNow, "Автоматически", null, null, [3]),
+            Header = new ForecastHistoryHeader(id, DateTimeOffset.UtcNow, "Автоматически", null, null, "pending", null, null, [3]),
         };
         var objects = new StubDispatcherObjectRepository(
         [
@@ -122,7 +124,7 @@ public sealed class ForecastHistoryQueryServiceTests
         var id = Guid.NewGuid();
         var journal = new StubForecastJournalRepository
         {
-            Header = new ForecastHistoryHeader(id, DateTimeOffset.UtcNow, "admin.test", null, null, [3]),
+            Header = new ForecastHistoryHeader(id, DateTimeOffset.UtcNow, "admin.test", null, null, "pending", null, null, [3]),
         };
         IReadOnlyList<string> own = ["Нет связи"];
         var objects = new StubDispatcherObjectRepository(
@@ -144,7 +146,7 @@ public sealed class ForecastHistoryQueryServiceTests
         var id = Guid.NewGuid();
         var journal = new StubForecastJournalRepository
         {
-            Header = new ForecastHistoryHeader(id, DateTimeOffset.UtcNow, "admin.test", null, null, [1, 2, 3]),
+            Header = new ForecastHistoryHeader(id, DateTimeOffset.UtcNow, "admin.test", null, null, "pending", null, null, [1, 2, 3]),
         };
         var rows = new Dictionary<int, ForecastJournalResult>
         {
@@ -176,7 +178,7 @@ public sealed class ForecastHistoryQueryServiceTests
         var id = Guid.NewGuid();
         var journal = new StubForecastJournalRepository
         {
-            Header = new ForecastHistoryHeader(id, DateTimeOffset.UtcNow, "admin.test", null, null, [1]),
+            Header = new ForecastHistoryHeader(id, DateTimeOffset.UtcNow, "admin.test", null, null, "pending", null, null, [1]),
         };
         var rows = new Dictionary<int, ForecastJournalResult>
         {
@@ -203,7 +205,7 @@ public sealed class ForecastHistoryQueryServiceTests
         var id = Guid.NewGuid();
         var journal = new StubForecastJournalRepository
         {
-            Header = new ForecastHistoryHeader(id, DateTimeOffset.UtcNow, "admin.test", null, null, [1]),
+            Header = new ForecastHistoryHeader(id, DateTimeOffset.UtcNow, "admin.test", null, null, "pending", null, null, [1]),
         };
         var rows = new Dictionary<int, ForecastJournalResult>
         {
@@ -219,6 +221,51 @@ public sealed class ForecastHistoryQueryServiceTests
         Assert.True(obj.HasResult);
         Assert.Null(obj.HasHighRisk);
         Assert.Empty(obj.ForecastValues);
+    }
+
+    [Fact]
+    public async Task ListAsync_ApprovedColumn_MapsLoginAndTime()
+    {
+        var id = Guid.Parse("2c059017-47c7-480a-b0a1-516be249695d");
+        var created = new DateTimeOffset(2026, 9, 25, 10, 30, 0, TimeSpan.Zero);
+        var start = created;
+        var end = created.AddHours(1);
+        var approvedAt = created.AddHours(2);
+        var journal = new StubForecastJournalRepository
+        {
+            Rows =
+            [
+                new ForecastHistoryListRow(
+                    id, created, "admin.test", start, end, 96, "approved", "dispetcher_ods", approvedAt),
+            ],
+            Total = 1,
+        };
+        var page = await CreateService(journal, new StubDispatcherObjectRepository([]))
+            .ListAsync(new ForecastHistoryListQuery(null, null, null, 1, 20), TestContext.Current.CancellationToken);
+        var item = Assert.Single(page.Items);
+        Assert.Equal("approved", item.Status);
+        Assert.Equal("dispetcher_ods", item.ApprovedByLogin);
+        Assert.Equal(approvedAt, item.ApprovedAt);
+    }
+
+    [Fact]
+    public async Task GetByIdAsync_Approved_SetsStatusAndApprover()
+    {
+        var id = Guid.NewGuid();
+        var created = DateTimeOffset.UtcNow;
+        var start = created;
+        var end = created.AddMinutes(5);
+        var approvedAt = end.AddMinutes(1);
+        var journal = new StubForecastJournalRepository
+        {
+            Header = new ForecastHistoryHeader(
+                id, created, "admin.test", start, end, "approved", "admin.test", approvedAt, [1]),
+        };
+        var detail = await CreateService(journal, new StubDispatcherObjectRepository([Object(1)]))
+            .GetByIdAsync(id, TestContext.Current.CancellationToken);
+        Assert.Equal("approved", detail!.Status);
+        Assert.Equal("admin.test", detail.ApprovedByLogin);
+        Assert.Equal(approvedAt, detail.ApprovedAt);
     }
 
     private static ForecastHistoryQueryService CreateService(
@@ -310,5 +357,12 @@ public sealed class ForecastHistoryQueryServiceTests
             Guid id,
             CancellationToken cancellationToken = default)
             => Task.FromResult(Header);
+
+        public Task<bool> ApproveAsync(
+            Guid id,
+            Guid userId,
+            DateTimeOffset approvedAt,
+            CancellationToken cancellationToken = default)
+            => throw new NotSupportedException();
     }
 }

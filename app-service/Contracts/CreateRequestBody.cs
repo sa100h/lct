@@ -2,7 +2,7 @@ namespace AppService.Contracts;
 
 public sealed record CreateRequestBody(
     Guid ForecastJournalId,
-    int DispatcherObjectId,
+    IReadOnlyList<int> DispatcherObjectIds,
     string Description,
     int? Priority,
     Guid TechnicianId);

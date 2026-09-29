@@ -5,4 +5,6 @@ public sealed record ForecastHistoryListItemResponse(
     DateTimeOffset CreatedAt,
     string AuthorLogin,
     string Status,
-    int ObjectCount);
+    int ObjectCount,
+    string? ApprovedByLogin,
+    DateTimeOffset? ApprovedAt);

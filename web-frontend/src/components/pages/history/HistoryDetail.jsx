@@ -7,22 +7,28 @@ import {
   Input,
   InputNumber,
   Modal,
-  Popconfirm,
   Select,
   Spin,
+  Tag,
   Tree,
   message,
 } from 'antd'
 import { Link, useParams } from 'react-router-dom'
 import { useSelector } from 'react-redux'
 import { AuthHttpError } from '@/api/auth.js'
-import { getForecastHistory, markForecastErroneous } from '@/api/forecastHistory.js'
+import {
+  approveForecast,
+  getForecastHistory,
+  markForecastErroneous,
+} from '@/api/forecastHistory.js'
 import { createRequest } from '@/api/requests.js'
 import { listUsersByRole } from '@/api/users.js'
 import { buildObjectTree } from '@/components/pages/prediction/buildObjectTree.js'
 import { mapForecastTone, mergeExpandedKeys, rootExpandedKeys, scrollTreeToKey, toMapMarkers } from '@/components/pages/map/mapTreeKeys.js'
 import { formatObjectCount } from '@/components/objectTree/formatObjectCount.js'
 import { forecastCategoryLabel, forecastResultHeadline } from '@/components/pages/history/forecastResultCopy.js'
+import { FORECAST_STATUS_LABEL, forecastStatusTagColor } from '@/components/pages/history/forecastStatusTag.js'
+import HistoryObjectCheckTree from '@/components/pages/history/HistoryObjectCheckTree.jsx'
 import YandexMap from '@/components/pages/map/YandexMap.jsx'
 import '@/components/pages/map/Map.css'
 import './HistoryDetail.css'
@@ -35,6 +41,10 @@ const LOAD_ERROR_TEXT =
 
 function formatWhen(value) {
   return new Date(value).toLocaleString('ru-RU')
+}
+
+function keysToIds(keys) {
+  return keys.map((key) => Number(key))
 }
 
 export default function HistoryDetail() {
@@ -52,10 +62,18 @@ export default function HistoryDetail() {
   const [loadError, setLoadError] = useState(false)
   const [modalObject, setModalObject] = useState(null)
   const [requestOpen, setRequestOpen] = useState(false)
+  const [requestKeys, setRequestKeys] = useState([])
   const [technicians, setTechnicians] = useState([])
   const [techniciansLoading, setTechniciansLoading] = useState(false)
   const [requestError, setRequestError] = useState(null)
   const [requestSubmitting, setRequestSubmitting] = useState(false)
+  const [erroneousOpen, setErroneousOpen] = useState(false)
+  const [erroneousKeys, setErroneousKeys] = useState([])
+  const [erroneousError, setErroneousError] = useState(null)
+  const [erroneousSubmitting, setErroneousSubmitting] = useState(false)
+  const [approveOpen, setApproveOpen] = useState(false)
+  const [approveError, setApproveError] = useState(null)
+  const [approveSubmitting, setApproveSubmitting] = useState(false)
   const [form] = Form.useForm()
   const treeRef = useRef(null)
 
@@ -135,6 +153,7 @@ export default function HistoryDetail() {
 
   const openRequest = async () => {
     setRequestError(null)
+    setRequestKeys([])
     form.resetFields()
     setRequestOpen(true)
     setTechniciansLoading(true)
@@ -150,12 +169,15 @@ export default function HistoryDetail() {
   }
 
   const submitRequest = async (values) => {
+    if (requestKeys.length === 0) {
+      return
+    }
     setRequestError(null)
     setRequestSubmitting(true)
     try {
       await createRequest({
         forecastJournalId: id,
-        dispatcherObjectId: selectedId,
+        dispatcherObjectIds: keysToIds(requestKeys),
         description: values.description,
         priority: values.priority ?? null,
         technicianId: values.technicianId,
@@ -173,17 +195,46 @@ export default function HistoryDetail() {
     }
   }
 
-  const onMarkErroneous = async () => {
+  const submitErroneous = async () => {
+    if (erroneousKeys.length === 0) {
+      throw new Error('empty')
+    }
+    setErroneousError(null)
+    setErroneousSubmitting(true)
     try {
-      await markForecastErroneous(id, selectedId)
+      await markForecastErroneous(id, keysToIds(erroneousKeys))
+      setErroneousOpen(false)
       message.success('Объекты отмечены как ошибочные')
       await loadDetail({ showSpinner: false, keepSelection: true })
     } catch (caught) {
-      message.error(
+      setErroneousError(
         caught instanceof AuthHttpError && caught.displayMessage
           ? caught.displayMessage
           : 'Не удалось отметить объекты',
       )
+      throw caught
+    } finally {
+      setErroneousSubmitting(false)
+    }
+  }
+
+  const submitApprove = async () => {
+    setApproveError(null)
+    setApproveSubmitting(true)
+    try {
+      await approveForecast(id)
+      setApproveOpen(false)
+      message.success('Прогноз обработан')
+      await loadDetail({ showSpinner: false, keepSelection: true })
+    } catch (caught) {
+      setApproveError(
+        caught instanceof AuthHttpError && caught.displayMessage
+          ? caught.displayMessage
+          : 'Не удалось обработать прогноз',
+      )
+      throw caught
+    } finally {
+      setApproveSubmitting(false)
     }
   }
 
@@ -209,16 +260,46 @@ export default function HistoryDetail() {
   const showAlert = !apikey || loadError
   const alertText = !apikey ? MISSING_KEY_TEXT : LOAD_ERROR_TEXT
   const objects = detail?.objects ?? []
-  const noSelection = selectedId == null
 
   return (
     <div className="history-detail">
-      <Breadcrumb
-        items={[
-          { title: <Link to="/prediction">Прогноз</Link> },
-          { title: `Прогноз ${formatWhen(detail.createdAt)}` },
-        ]}
-      />
+      <div className="history-detail-header">
+        <div className="history-detail-header-start">
+          <Breadcrumb
+            items={[
+              { title: <Link to="/prediction">Прогноз</Link> },
+              { title: `Прогноз ${formatWhen(detail.createdAt)}` },
+            ]}
+          />
+          <Tag color={forecastStatusTagColor(detail.status)}>
+            {FORECAST_STATUS_LABEL[detail.status] ?? detail.status}
+          </Tag>
+        </div>
+        <div className="history-detail-actions">
+          {canRequest ? (
+            <Button onClick={() => void openRequest()}>Создать заявку</Button>
+          ) : null}
+          <Button
+            onClick={() => {
+              setErroneousError(null)
+              setErroneousKeys([])
+              setErroneousOpen(true)
+            }}
+          >
+            Отметить как ошибочный
+          </Button>
+          {detail.status === 'done' ? (
+            <Button
+              onClick={() => {
+                setApproveError(null)
+                setApproveOpen(true)
+              }}
+            >
+              Прогноз обработан
+            </Button>
+          ) : null}
+        </div>
+      </div>
       <div className="map-page">
         <div className="map-page-main">
           {showAlert ? (
@@ -240,22 +321,6 @@ export default function HistoryDetail() {
           <div className="map-page-list-header">
             <h2>Объекты</h2>
             <span className="map-page-list-count">{formatObjectCount(objects.length)}</span>
-            <div className="history-detail-actions">
-              {canRequest ? (
-                <Button disabled={noSelection} onClick={() => void openRequest()}>
-                  Создать заявку
-                </Button>
-              ) : null}
-              <Popconfirm
-                title="Отметить выбранные объекты как ошибочные?"
-                okText="Да"
-                cancelText="Нет"
-                disabled={noSelection}
-                onConfirm={() => void onMarkErroneous()}
-              >
-                <Button disabled={noSelection}>Отметить как ошибочный</Button>
-              </Popconfirm>
-            </div>
           </div>
           <div className="map-page-list-body">
             <Tree
@@ -335,6 +400,15 @@ export default function HistoryDetail() {
       >
         {requestError ? <Alert type="error" showIcon message={requestError} /> : null}
         <Form form={form} layout="vertical" onFinish={(values) => void submitRequest(values)}>
+          <Form.Item label="Объекты" required>
+            <div className="history-detail-check-tree">
+              <HistoryObjectCheckTree
+                treeData={treeData}
+                checkedKeys={requestKeys}
+                onCheck={setRequestKeys}
+              />
+            </div>
+          </Form.Item>
           <Form.Item
             label="Описание"
             name="description"
@@ -360,11 +434,44 @@ export default function HistoryDetail() {
             type="primary"
             htmlType="submit"
             loading={requestSubmitting}
-            disabled={technicians.length === 0}
+            disabled={requestKeys.length === 0 || technicians.length === 0}
           >
             Создать
           </Button>
         </Form>
+      </Modal>
+      <Modal
+        open={erroneousOpen}
+        title="Отметить как ошибочный"
+        okText="Да"
+        cancelText="Нет"
+        confirmLoading={erroneousSubmitting}
+        okButtonProps={{ disabled: erroneousKeys.length === 0 }}
+        onOk={() => void submitErroneous()}
+        onCancel={() => setErroneousOpen(false)}
+        destroyOnHidden
+      >
+        {erroneousError ? <Alert type="error" showIcon message={erroneousError} /> : null}
+        <div className="history-detail-check-tree">
+          <HistoryObjectCheckTree
+            treeData={treeData}
+            checkedKeys={erroneousKeys}
+            onCheck={setErroneousKeys}
+          />
+        </div>
+      </Modal>
+      <Modal
+        open={approveOpen}
+        title="Прогноз обработан"
+        okText="Да"
+        cancelText="Нет"
+        confirmLoading={approveSubmitting}
+        onOk={() => void submitApprove()}
+        onCancel={() => setApproveOpen(false)}
+        destroyOnHidden
+      >
+        {approveError ? <Alert type="error" showIcon message={approveError} /> : null}
+        <p>Отметить прогноз как обработанный?</p>
       </Modal>
     </div>
   )

@@ -6,4 +6,7 @@ public sealed record ForecastHistoryListRow(
     string AuthorLogin,
     DateTimeOffset? StartCompositionTime,
     DateTimeOffset? EndCompositionTime,
-    int ObjectCount);
+    int ObjectCount,
+    string JournalStatus,
+    string? ApprovedByLogin,
+    DateTimeOffset? ApprovedAt);

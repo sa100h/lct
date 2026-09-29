@@ -13,7 +13,8 @@ namespace AppService.Controllers;
 public sealed class ForecastsController(
     IForecastRunService forecasts,
     IForecastHistoryQueryService history,
-    IForecastErroneousService erroneous) : ControllerBase
+    IForecastErroneousService erroneous,
+    IForecastApproveService approve) : ControllerBase
 {
     [HttpPost("run")]
     [Authorize(Policy = PermissionCodes.ModulePrediction)]
@@ -112,7 +113,9 @@ public sealed class ForecastsController(
                         item.CreatedAt,
                         item.AuthorLogin,
                         item.Status,
-                        item.ObjectCount))
+                        item.ObjectCount,
+                        item.ApprovedByLogin,
+                        item.ApprovedAt))
                     .ToArray(),
                 pageResult.Total));
         }
@@ -141,6 +144,8 @@ public sealed class ForecastsController(
             detail.CreatedAt,
             detail.AuthorLogin,
             detail.Status,
+            detail.ApprovedByLogin,
+            detail.ApprovedAt,
             detail.Objects
                 .Select(item => new ForecastHistoryObjectResponse(
                     item.Id,
@@ -180,12 +185,46 @@ public sealed class ForecastsController(
 
         try
         {
-            await erroneous.MarkAsync(id, userId, body.DispatcherObjectId, cancellationToken);
+            await erroneous.MarkAsync(id, userId, body.DispatcherObjectIds ?? [], cancellationToken);
             return NoContent();
         }
         catch (KeyNotFoundException exception)
         {
             return NotFound(new { error = exception.Message });
+        }
+        catch (ArgumentException exception)
+        {
+            return BadRequest(new { error = exception.Message });
+        }
+    }
+
+    [HttpPost("{id:guid}/approve")]
+    [Authorize(Policy = PermissionCodes.ModuleHistory)]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
+    public async Task<IActionResult> Approve(
+        Guid id,
+        CancellationToken cancellationToken)
+    {
+        if (!Guid.TryParse(User.FindFirst(JwtRegisteredClaimNames.Sub)?.Value, out var userId))
+        {
+            return Unauthorized();
+        }
+
+        try
+        {
+            await approve.ApproveAsync(id, userId, cancellationToken);
+            return NoContent();
+        }
+        catch (KeyNotFoundException exception)
+        {
+            return NotFound(new { error = exception.Message });
+        }
+        catch (InvalidOperationException exception)
+        {
+            return Conflict(new { error = exception.Message });
         }
         catch (ArgumentException exception)
         {

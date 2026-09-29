@@ -30,4 +30,10 @@ public interface IForecastJournalRepository
     Task<ForecastHistoryHeader?> GetHeaderAsync(
         Guid id,
         CancellationToken cancellationToken = default);
+
+    Task<bool> ApproveAsync(
+        Guid id,
+        Guid userId,
+        DateTimeOffset approvedAt,
+        CancellationToken cancellationToken = default);
 }

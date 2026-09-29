@@ -143,7 +143,7 @@ public sealed class RequestsController(
                 userId,
                 new CreateRequestCommand(
                     body.ForecastJournalId,
-                    body.DispatcherObjectId,
+                    body.DispatcherObjectIds ?? [],
                     body.Description,
                     body.Priority,
                     body.TechnicianId),

@@ -4,11 +4,13 @@ namespace AppService.Services.Domain;
 
 public sealed class RequestCommandService(
     IRequestRepository requests,
+    IForecastJournalRepository journal,
     IDispatcherObjectRepository objects) : IRequestCommandService
 {
     public const string MissingJournal = "Прогноз не найден.";
     public const string MissingTechnician = "Техник не найден.";
     public const string MissingObject = "Объект не найден.";
+    public const string EmptyObjects = "Выберите объекты.";
     public const string DescriptionRequired = "Описание обязательно.";
     public const string MissingRequest = "Заявка не найдена.";
     public const string UnknownStatus = "Неизвестный статус.";
@@ -24,7 +26,13 @@ public sealed class RequestCommandService(
             throw new ArgumentException(DescriptionRequired);
         }
 
-        if (!await requests.ForecastJournalExistsAsync(command.ForecastJournalId, cancellationToken))
+        if (command.DispatcherObjectIds is null || command.DispatcherObjectIds.Count == 0)
+        {
+            throw new ArgumentException(EmptyObjects);
+        }
+
+        var header = await journal.GetHeaderAsync(command.ForecastJournalId, cancellationToken);
+        if (header is null)
         {
             throw new KeyNotFoundException(MissingJournal);
         }
@@ -34,8 +42,9 @@ public sealed class RequestCommandService(
             throw new ArgumentException(MissingTechnician);
         }
 
-        var objectIds = await objects.GetSubtreeIdsAsync(command.DispatcherObjectId, cancellationToken);
-        if (objectIds.Count == 0)
+        var all = await objects.GetAllWithDescendantStatusesAsync(cancellationToken);
+        var allowed = ForecastJournalTree.AllowedIds(header.DispatcherObjectIds, all);
+        if (command.DispatcherObjectIds.Any(id => !allowed.Contains(id)))
         {
             throw new ArgumentException(MissingObject);
         }
@@ -45,7 +54,7 @@ public sealed class RequestCommandService(
             description,
             dispatcherUserId,
             command.TechnicianId,
-            objectIds,
+            command.DispatcherObjectIds.Distinct().ToArray(),
             command.Priority,
             cancellationToken);
     }

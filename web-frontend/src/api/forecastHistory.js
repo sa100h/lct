@@ -1,6 +1,25 @@
 import { AuthHttpError } from '@/api/auth.js'
 import { apiFetch } from '@/api/client.js'
 
+function parseJson(text) {
+  if (!text) {
+    return null
+  }
+  try {
+    return JSON.parse(text)
+  } catch {
+    return null
+  }
+}
+
+function throwHttpError(status, data) {
+  const error = new AuthHttpError(status)
+  if (data && typeof data.error === 'string' && data.error) {
+    error.displayMessage = data.error
+  }
+  throw error
+}
+
 export async function listForecastAuthors() {
   const response = await apiFetch('/api/app/forecasts/authors')
   if (!response.ok) {
@@ -43,26 +62,27 @@ export async function getForecastHistory(id) {
   return response.json()
 }
 
-export async function markForecastErroneous(id, dispatcherObjectId) {
-  const response = await apiFetch(`/api/app/forecasts/${id}/erroneous`, {
-    method: 'POST',
-    body: JSON.stringify({ dispatcherObjectId }),
-  })
-  const text = await response.text()
-  let data = null
-  if (text) {
-    try {
-      data = JSON.parse(text)
-    } catch {
-      data = null
-    }
-  }
+async function postForecastAction(path) {
+  const response = await apiFetch(path, { method: 'POST' })
+  const data = parseJson(await response.text())
   if (response.status === 204) {
     return
   }
-  const error = new AuthHttpError(response.status)
-  if (data && typeof data.error === 'string' && data.error) {
-    error.displayMessage = data.error
+  throwHttpError(response.status, data)
+}
+
+export async function approveForecast(id) {
+  await postForecastAction(`/api/app/forecasts/${id}/approve`)
+}
+
+export async function markForecastErroneous(id, dispatcherObjectIds) {
+  const response = await apiFetch(`/api/app/forecasts/${id}/erroneous`, {
+    method: 'POST',
+    body: JSON.stringify({ dispatcherObjectIds }),
+  })
+  const data = parseJson(await response.text())
+  if (response.status === 204) {
+    return
   }
-  throw error
+  throwHttpError(response.status, data)
 }

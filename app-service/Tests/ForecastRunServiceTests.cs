@@ -158,6 +158,13 @@ public sealed class ForecastRunServiceTests
             Guid id,
             CancellationToken cancellationToken = default)
             => throw new NotSupportedException();
+
+        public Task<bool> ApproveAsync(
+            Guid id,
+            Guid userId,
+            DateTimeOffset approvedAt,
+            CancellationToken cancellationToken = default)
+            => throw new NotSupportedException();
     }
 
     private sealed class RecordingForecastChannelRepository : IForecastChannelRepository

@@ -32,11 +32,40 @@
   padding-left: 1.25em;
 }
 
+.history-detail-header {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.history-detail-header-start {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
 .history-detail-actions {
   display: flex;
   gap: 8px;
   flex-wrap: wrap;
-  margin-top: 8px;
+  margin-top: 0;
+}
+
+.history-detail-check-tree {
+  width: 100%;
+  max-height: 240px;
+  overflow: auto;
+  padding: 8px;
+  border: 1px solid #f0f0f0;
+  border-radius: 8px;
+  background: #fafafa;
+}
+
+.history-detail-check-tree .ant-tree {
+  background: transparent;
 }
 
 .map-tree-erroneous {

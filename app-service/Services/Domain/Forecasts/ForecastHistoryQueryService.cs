@@ -39,10 +39,13 @@ public sealed class ForecastHistoryQueryService(
                 row.Id,
                 row.CreatedAt,
                 row.AuthorLogin,
-                DashboardQueryService.MapForecastStatus(
+                ForecastHistoryStatus.Resolve(
+                    row.JournalStatus,
                     row.StartCompositionTime,
                     row.EndCompositionTime),
-                row.ObjectCount))
+                row.ObjectCount,
+                row.ApprovedByLogin,
+                row.ApprovedAt))
             .ToArray();
 
         return new ForecastHistoryListPage(items, total);
@@ -59,17 +62,7 @@ public sealed class ForecastHistoryQueryService(
         }
 
         var all = await objects.GetAllWithDescendantStatusesAsync(cancellationToken);
-        var byId = all.ToDictionary(item => item.Id);
-        var includedIds = new HashSet<int>();
-        foreach (var objectId in header.DispatcherObjectIds ?? [])
-        {
-            int? currentId = objectId;
-            while (currentId is int ancestorId && byId.TryGetValue(ancestorId, out var current)
-                   && includedIds.Add(ancestorId))
-            {
-                currentId = current.ParentId;
-            }
-        }
+        var includedIds = ForecastJournalTree.AllowedIds(header.DispatcherObjectIds, all);
         var selected = all.Where(item => includedIds.Contains(item.Id));
         var rows = await results.ListByJournalAsync(id, cancellationToken);
 
@@ -101,9 +94,12 @@ public sealed class ForecastHistoryQueryService(
             header.Id,
             header.CreatedAt,
             header.AuthorLogin,
-            DashboardQueryService.MapForecastStatus(
+            ForecastHistoryStatus.Resolve(
+                header.JournalStatus,
                 header.StartCompositionTime,
                 header.EndCompositionTime),
+            header.ApprovedByLogin,
+            header.ApprovedAt,
             mapped);
     }
 }

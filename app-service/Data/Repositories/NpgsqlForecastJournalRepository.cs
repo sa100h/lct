@@ -107,6 +107,7 @@ public sealed class NpgsqlForecastJournalRepository(string connectionString) : I
         const string filters = """
             FROM forecast_journal j
             LEFT JOIN users u ON u.id = j.user_created_id
+            LEFT JOIN users approver ON approver.id = j.user_approved_id
             WHERE (@createdBy::uuid IS NULL OR j.user_created_id = @createdBy)
               AND (@fromDate::date IS NULL OR j.creation_time::date >= @fromDate)
               AND (@toDate::date IS NULL OR j.creation_time::date <= @toDate)
@@ -124,7 +125,10 @@ public sealed class NpgsqlForecastJournalRepository(string connectionString) : I
                    j.start_composition_time, j.end_composition_time,
                    (SELECT COUNT(DISTINCT channel.dispatcher_object_id)::int
                     FROM jsonb_object_keys(j.forecast_channels) AS key(channel_id)
-                    JOIN sensor_channels channel ON channel.id = key.channel_id::int)
+                    JOIN sensor_channels channel ON channel.id = key.channel_id::int),
+                   j.status,
+                   approver.login,
+                   j.approved_time
             {filters}
             ORDER BY j.creation_time DESC, j.id DESC
             OFFSET @offset LIMIT @limit
@@ -143,7 +147,10 @@ public sealed class NpgsqlForecastJournalRepository(string connectionString) : I
                 reader.GetString(2),
                 ReadUtcOrNull(reader, 3),
                 ReadUtcOrNull(reader, 4),
-                reader.GetInt32(5)));
+                reader.GetInt32(5),
+                reader.GetString(6),
+                ReadStringOrNull(reader, 7),
+                ReadUtcOrNull(reader, 8)));
         }
 
         return (items, total);
@@ -158,11 +165,15 @@ public sealed class NpgsqlForecastJournalRepository(string connectionString) : I
         await using var command = new NpgsqlCommand("""
             SELECT j.id, j.creation_time, COALESCE(u.login, 'Автоматически'),
                    j.start_composition_time, j.end_composition_time,
+                   j.status,
+                   approver.login,
+                   j.approved_time,
                    ARRAY(SELECT DISTINCT channel.dispatcher_object_id
                          FROM jsonb_object_keys(j.forecast_channels) AS key(channel_id)
                          JOIN sensor_channels channel ON channel.id = key.channel_id::int)
             FROM forecast_journal j
             LEFT JOIN users u ON u.id = j.user_created_id
+            LEFT JOIN users approver ON approver.id = j.user_approved_id
             WHERE j.id = @id
             """, connection);
         command.Parameters.AddWithValue("id", id);
@@ -179,7 +190,36 @@ public sealed class NpgsqlForecastJournalRepository(string connectionString) : I
             reader.GetString(2),
             ReadUtcOrNull(reader, 3),
             ReadUtcOrNull(reader, 4),
-            reader.GetFieldValue<int[]>(5));
+            reader.GetString(5),
+            ReadStringOrNull(reader, 6),
+            ReadUtcOrNull(reader, 7),
+            reader.GetFieldValue<int[]>(8));
+    }
+
+    public async Task<bool> ApproveAsync(
+        Guid id,
+        Guid userId,
+        DateTimeOffset approvedAt,
+        CancellationToken cancellationToken = default)
+    {
+        await using var connection = new NpgsqlConnection(connectionString);
+        await connection.OpenAsync(cancellationToken);
+        await using var command = new NpgsqlCommand("""
+            UPDATE forecast_journal
+            SET status = 'approved',
+                user_approved_id = @userId,
+                approved_time = @approvedAt
+            WHERE id = @id
+              AND status IS DISTINCT FROM 'approved'
+            """, connection);
+        command.Parameters.AddWithValue("id", id);
+        command.Parameters.AddWithValue("userId", userId);
+        command.Parameters.AddWithValue(
+            "approvedAt",
+            NpgsqlDbType.Timestamp,
+            DateTime.SpecifyKind(approvedAt.UtcDateTime, DateTimeKind.Unspecified));
+        var affected = await command.ExecuteNonQueryAsync(cancellationToken);
+        return affected > 0;
     }
 
     private static void AddListParameters(
@@ -204,4 +244,7 @@ public sealed class NpgsqlForecastJournalRepository(string connectionString) : I
 
     private static DateTimeOffset? ReadUtcOrNull(NpgsqlDataReader reader, int ordinal)
         => reader.IsDBNull(ordinal) ? null : ReadUtc(reader, ordinal);
+
+    private static string? ReadStringOrNull(NpgsqlDataReader reader, int ordinal)
+        => reader.IsDBNull(ordinal) ? null : reader.GetString(ordinal);
 }

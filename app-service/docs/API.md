@@ -382,7 +382,13 @@ Query:
 
 `page < 1` или `pageSize < 1`, битый uuid/дата — `400`. Сортировка: `creation_time DESC`, `id DESC`.
 
-Статус: `pending` / `running` / `done` (как на дашборде). `objectCount` — число уникальных объектов, которым принадлежат каналы из `forecast_channels`. Для автоматической записи `authorLogin` равен `auto_forecast`.
+Статус: `pending` / `running` / `done` по `start_composition_time` /
+`end_composition_time` (как на дашборде). Если `forecast_journal.status =
+'approved'`, в JSON отдаём `"approved"` вместо `"done"`. Другие значения колонки
+(`error`, `cancelled`) на статус ответа не влияют. `approvedByLogin` и
+`approvedAt` всегда в объекте; пока не обработан — `null`. `objectCount` — число
+уникальных объектов, которым принадлежат каналы из `forecast_channels`. Для
+автоматической записи `authorLogin` равен `auto_forecast`.
 
 **Ответ 200**
 
@@ -394,7 +400,9 @@ Query:
       "createdAt": "2026-09-25T10:30:00Z",
       "authorLogin": "admin.test",
       "status": "pending",
-      "objectCount": 96
+      "objectCount": 96,
+      "approvedByLogin": null,
+      "approvedAt": null
     }
   ],
   "total": 1
@@ -404,7 +412,8 @@ Query:
 ### `GET /forecasts/{id}`
 
 Нужны JWT и permission `module.history`. Деталь запуска: объекты с координатами,
-оценкой и числами каналов.
+оценкой и числами каналов. `status`, `approvedByLogin`, `approvedAt` — как в
+`GET /forecasts`.
 
 - `hasResult` — есть строка `forecast_results` для объекта.
 - `forecastValues` — только каналы с числом `value`. `unpredictable` и записи без
@@ -429,6 +438,8 @@ Query:
   "createdAt": "2026-09-25T10:30:00Z",
   "authorLogin": "admin.test",
   "status": "pending",
+  "approvedByLogin": null,
+  "approvedAt": null,
   "objects": [
     {
       "id": 20,
@@ -470,21 +481,39 @@ Query:
 | 403 | Нет права `module.history` |
 | 404 | Нет журнала |
 
+Корень карточки: тот же `status`, `approvedByLogin`, `approvedAt`, что в списке.
+
+### `POST /forecasts/{id}/approve`
+
+Нужны JWT и permission `module.history`. Тела нет. Ставит `status = 'approved'`,
+`user_approved_id = sub`, `approved_time = now()` (UTC). Только если по времени
+статус уже `done`. Повтор — 409. 204 без тела.
+
+| Код | Когда |
+|---|---|
+| 400 | Ещё не `done` |
+| 401 | Нет JWT |
+| 403 | Нет `module.history` |
+| 404 | Нет журнала |
+| 409 | Уже `approved` |
+
 ### `POST /forecasts/{id}/erroneous`
 
-Нужны JWT и permission `module.history`. Помечает выбранный объект и всех потомков как ошибочные (`forecast_results.is_erroneous`). Статус журнала не меняется. Повтор идемпотентен.
+Нужны JWT и permission `module.history`. Помечает **переданные** объекты как
+ошибочные (`forecast_results.is_erroneous`). Все id должны входить в дерево этого
+прогноза (каналы журнала + предки). Статус журнала не меняется. Повтор идемпотентен.
 
 **Тело**
 
 ```json
-{ "dispatcherObjectId": 5 }
+{ "dispatcherObjectIds": [5, 5122] }
 ```
 
 **Ответ 204** без тела.
 
 | Код | Когда |
 |---|---|
-| 400 | Объект не найден |
+| 400 | Пустой массив или id не из дерева прогноза |
 | 401 | Нет JWT |
 | 403 | Нет `module.history` |
 | 404 | Журнала нет |
@@ -505,14 +534,16 @@ Query:
 
 ### `POST /requests`
 
-Нужны JWT и permission `module.requests`. Создаёт заявку на журнал прогноза: выбранный объект и все потомки. Диспетчер — `sub` JWT. Статус «Новая».
+Нужны JWT и permission `module.requests`. Создаёт заявку на журнал прогноза:
+отмеченные объекты дерева этого прогноза (без разворота иерархии вне прогноза).
+Диспетчер — `sub` JWT. Статус «Новая».
 
 **Тело**
 
 ```json
 {
   "forecastJournalId": "2c059017-47c7-480a-b0a1-516be249695d",
-  "dispatcherObjectId": 5,
+  "dispatcherObjectIds": [5, 5122],
   "description": "Проверить канал",
   "priority": 1,
   "technicianId": "03863c40-04e4-4ffe-b7cf-3dd31dab0ade"
@@ -527,7 +558,7 @@ Query:
 
 | Код | Когда |
 |---|---|
-| 400 | Нет описания, техник не Technics, объект не найден |
+| 400 | Нет описания, пустой массив, техник не Technics, id не из дерева прогноза |
 | 401 | Нет JWT |
 | 403 | Нет `module.requests` |
 | 404 | Журнала нет |
@@ -787,6 +818,7 @@ curl -k https://localhost/api/app/authz/demo \
 | GET | `/forecasts/authors` | `/api/app/forecasts/authors` | Bearer + `module.history` |
 | GET | `/forecasts` | `/api/app/forecasts` | Bearer + `module.history` |
 | GET | `/forecasts/{id}` | `/api/app/forecasts/{id}` | Bearer + `module.history` |
+| POST | `/forecasts/{id}/approve` | `/api/app/forecasts/{id}/approve` | Bearer + `module.history` |
 | POST | `/forecasts/{id}/erroneous` | `/api/app/forecasts/{id}/erroneous` | Bearer + `module.history` |
 | GET | `/users` | `/api/app/users` | Bearer + `module.requests` |
 | POST | `/requests` | `/api/app/requests` | Bearer + `module.requests` |

@@ -67,6 +67,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IRequestQueryService, RequestQueryService>();
         services.AddScoped<IRequestCommandService, RequestCommandService>();
         services.AddScoped<IForecastErroneousService, ForecastErroneousService>();
+        services.AddScoped<IForecastApproveService, ForecastApproveService>();
         services.AddScoped<IReportQueryService, ReportQueryService>();
         services.AddSingleton<IReportPdfRenderer, ReportPdfRenderer>();
         services.AddSingleton<PostgresMigrator>();

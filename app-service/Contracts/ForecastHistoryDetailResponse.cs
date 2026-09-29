@@ -5,4 +5,6 @@ public sealed record ForecastHistoryDetailResponse(
     DateTimeOffset CreatedAt,
     string AuthorLogin,
     string Status,
+    string? ApprovedByLogin,
+    DateTimeOffset? ApprovedAt,
     IReadOnlyList<ForecastHistoryObjectResponse> Objects);

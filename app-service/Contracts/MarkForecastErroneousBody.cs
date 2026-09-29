@@ -1,3 +1,3 @@
 namespace AppService.Contracts;
 
-public sealed record MarkForecastErroneousBody(int DispatcherObjectId);
+public sealed record MarkForecastErroneousBody(IReadOnlyList<int> DispatcherObjectIds);

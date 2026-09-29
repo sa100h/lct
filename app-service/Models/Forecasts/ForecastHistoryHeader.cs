@@ -6,4 +6,7 @@ public sealed record ForecastHistoryHeader(
     string AuthorLogin,
     DateTimeOffset? StartCompositionTime,
     DateTimeOffset? EndCompositionTime,
+    string JournalStatus,
+    string? ApprovedByLogin,
+    DateTimeOffset? ApprovedAt,
     IReadOnlyList<int>? DispatcherObjectIds);
