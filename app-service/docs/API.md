@@ -301,7 +301,7 @@ UTC `[from 00:00 Europe/Moscow, (to+1 день) 00:00 Europe/Moscow)`.
 ряды по московским дням. Тревоги и заявки — таблицы до 2000 строк, иначе
 «показано 2000 из N». Техники: создано в периоде; закрыто = статус «Закрыта» и
 `updated_at` в периоде. Прогнозы: журналы за период, высокий риск как в истории
-(порог `Forecast:RiskThreshold`).
+(пороги `Forecast:RiskThresholds`, иначе `Forecast:RiskThreshold`).
 
 Ответ 200: `application/pdf`. Пустые данные — всё равно PDF, не 404.
 
@@ -425,8 +425,11 @@ Query:
   числа не входят. `sensorName` — `sensor_channels.sensor_name`; нет канала в БД —
   тот же текст, что `channelId`.
 - `hasHighRisk`: без строки или без чисел → `null`; иначе `true`, если хотя бы
-  одно `value` ≥ `Forecast:RiskThreshold` (по умолчанию `0.5`, env
-  `Forecast__RiskThreshold`), иначе `false`.
+  одно `value` ≥ порога **этой** категории из `Forecast:RiskThresholds`
+  (`sensor-failure` `0.27`, `fire-risk` `0.551`, `unauthorized-access` `0.65`,
+  `infrastructure-wear` `0.5`). Нет ключа — `Forecast:RiskThreshold` (по
+  умолчанию `0.5`, env `Forecast__RiskThreshold`). Иначе `false`. Env для карты:
+  `Forecast__RiskThresholds__sensor-failure` и т.д.
 - `isErroneous` — `forecast_results.is_erroneous`; нет строки → `false`. Если
   `isErroneous` true, `hasHighRisk` всегда `false`. `forecastValues` всё равно
   отдаём, если есть числа.

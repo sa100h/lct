@@ -70,7 +70,10 @@ public sealed class ForecastHistoryQueryService(
             .Select(item =>
             {
                 rows.TryGetValue(item.Id, out var row);
-                var parsed = ForecastRisk.Parse(row?.Description, forecast.RiskThreshold);
+                var parsed = ForecastRisk.Parse(
+                    row?.Description,
+                    forecast.RiskThreshold,
+                    forecast.RiskThresholds);
                 var erroneous = row?.IsErroneous == true;
                 return (item, row, parsed, erroneous);
             })

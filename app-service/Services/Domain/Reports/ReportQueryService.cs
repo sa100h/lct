@@ -136,7 +136,10 @@ public sealed class ReportQueryService(
                         continue;
                     }
 
-                    if (ForecastRisk.FromDescription(result.Description, forecast.RiskThreshold) == true)
+                    if (ForecastRisk.FromDescription(
+                            result.Description,
+                            forecast.RiskThreshold,
+                            forecast.RiskThresholds) == true)
                     {
                         highRisk++;
                     }

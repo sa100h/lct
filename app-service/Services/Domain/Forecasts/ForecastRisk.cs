@@ -8,9 +8,21 @@ public static class ForecastRisk
     private static readonly ForecastRiskParse Empty = new(null, []);
 
     public static bool? FromDescription(string? json, double threshold)
-        => Parse(json, threshold).HighRisk;
+        => Parse(json, threshold, null).HighRisk;
+
+    public static bool? FromDescription(
+        string? json,
+        double fallback,
+        IReadOnlyDictionary<string, double>? byCategory)
+        => Parse(json, fallback, byCategory).HighRisk;
 
     public static ForecastRiskParse Parse(string? json, double threshold)
+        => Parse(json, threshold, null);
+
+    public static ForecastRiskParse Parse(
+        string? json,
+        double fallback,
+        IReadOnlyDictionary<string, double>? byCategory)
     {
         if (string.IsNullOrWhiteSpace(json))
         {
@@ -55,7 +67,14 @@ public static class ForecastRisk
                     }
 
                     values.Add(new ForecastChannelValue(subject.Name, category.Name, number));
-                    if (number >= threshold)
+                    var limit = fallback;
+                    if (byCategory is not null
+                        && byCategory.TryGetValue(category.Name, out var mapped))
+                    {
+                        limit = mapped;
+                    }
+
+                    if (number >= limit)
                     {
                         anyHigh = true;
                     }
