@@ -9,6 +9,7 @@ from __future__ import annotations
 import os
 from datetime import datetime
 from enum import Enum
+from typing import Literal
 
 from pydantic import BaseModel, Field
 
@@ -107,3 +108,7 @@ class StatusResponse(BaseModel):
 
 class RetrainRequest(BaseModel):
     category: Category | None = Field(None, description="None = all categories.")
+    engine: Literal["lgbm", "hgb"] = Field(
+        "lgbm",
+        description="Training engine: 'lgbm' = production LightGBM (model.lgb), 'hgb' = sklearn baseline fallback.",
+    )

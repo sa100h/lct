@@ -14,6 +14,7 @@ import logging
 from fastapi import FastAPI, HTTPException
 
 from app.models.baseline import BaselineTrainer
+from app.models.lgbm_train import train_lgbm
 from app.models.registry import get_registry
 from app.predict.engine import PredictEngine
 from app.predict.lag_store import get_store
@@ -123,15 +124,25 @@ def predict_all_batch(req: BatchPredictionRequest) -> BatchPredictionResponse:
 
 @app.post("/retrain")
 def retrain(req: RetrainRequest) -> dict:
-    """Retrain from ingested data (data/<category>/*.parquet|csv). Hackathon hook:
-    feed it with real historical data after ingest/transform."""
+    """Retrain the categories from the feature parquets in the data mount.
+
+    ``engine="lgbm"`` (default) trains the production LightGBM model
+    (``model.lgb``); ``engine="hgb"`` keeps the sklearn baseline fallback.
+    A category without a feature parquet is reported as failed — it is never
+    silently replaced by a synthetic baseline model.
+    """
     registry = get_registry()
-    trainer = BaselineTrainer()
     results = {}
+    engines = {}
     targets = [req.category] if req.category else list(Category)
     for cat in targets:
+        engines[cat.value] = req.engine
         try:
-            metrics = trainer.fit(cat.value)
+            metrics = (
+                train_lgbm(cat.value)
+                if req.engine == "lgbm"
+                else BaselineTrainer().fit(cat.value)
+            )
         except Exception as exc:  # noqa: BLE001 — report per-category, don't fail the batch
             metrics = {"state": "failed", "error": str(exc)}
         results[cat.value] = registry.status(cat.value).state if "state" not in metrics else metrics
@@ -140,4 +151,4 @@ def retrain(req: RetrainRequest) -> dict:
             get_store().refresh(cat.value)
         except Exception:  # noqa: BLE001
             logger.exception("LagStore refresh failed for %s", cat.value)
-    return {"retrained": results}
+    return {"retrained": results, "engines": engines}

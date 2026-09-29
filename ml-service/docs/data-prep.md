@@ -82,15 +82,19 @@ cd /home/junai/lct/ml-service          # venv: ./.venv/bin/python
 (`ml-broker/app/scheduler_worker.py`) раз в 30 с забирает строки, у которых
 `enabled` и `next_run_at <= now()`, и для `kind='retrain'` вызывает
 `POST /retrain`, записывая прогон в `ml_retrain_runs` (подробности —
-`ml-broker/README.md`). Сеяное `daily-retrain` (`30 4 * * *`, UTC) активно,
-то есть переобучение запускается само; `hourly-predict` отключена миграцией
+`ml-broker/README.md`). `hourly-predict` отключена миграцией
 `039_disable_predict_all_schedule.sql` — вид `predict-all` не реализован.
+Сеяное `daily-retrain` (`30 4 * * *`, UTC) **выключено** (`enabled=false`):
+его заменит задание `refresh-retrain` (сбор данных + обучение) из плана
+`.hermes/plans/2026-09-29_111446-refresh-retrain-pipeline.md`.
 
-**Важно про движок.** `POST /retrain` обучает **HistGradientBoosting**
-(`app/models/baseline.py` → артефакт `model.joblib`), а не продовый LightGBM:
-продовые `model.lgb` получены ручным запуском `scripts/train.py` (по умолчанию
-`--engine lgbm`). Значит, прогон по расписанию заменит артефакт категории на
-`model.joblib` и удалит `model.lgb` из volume.
+**Про движок.** `POST /retrain` по умолчанию обучает продовый **LightGBM**
+(`engine="lgbm"` → `app/models/lgbm_train.py`, артефакт `model.lgb`).
+`engine="hgb"` — откат на sklearn-бейзлайн (`app/models/baseline.py` →
+`model.joblib`). Рецепт один для сервиса и CLI: `scripts/train.py` — тонкая
+обёртка над `app/models/lgbm_train.py`, пути берутся из `app/config.py`.
+Раньше копия рецепта жила в CLI с захардкоженными хостовыми путями, поэтому
+`/retrain` не мог её использовать и обучал HGB-бейзлайн, затирая `model.lgb`.
 
 Данные при переобучении не создаются: и `/retrain`, и `scripts/train.py` читают
 одни и те же `features-<кат>.parquet`, поэтому пересборка данных — всегда

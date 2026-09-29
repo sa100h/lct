@@ -16,7 +16,7 @@
 ## Справочник по изменению
 
 **Эпохи (раунды бустинга).** LightGBM — это бустинг, «эпоха» = один раунд (оно дерево). Три сценария:
-1. **Подбор через early stopping** (стандарт в `scripts.train`): модель тренируется до `rounds or 300` с `early_stopping=50` на valid=2025, затем финальный прогон с найденным `best_iteration` без эстопа. Чтобы изменить потолок — правьте число в `train_lgbm()` (`rounds=rounds or 300`) и `DEFAULT_ROUNDS`; «терпение» — `early_stopping=50` в том же файле.
+1. **Подбор через early stopping** (стандарт в `scripts.train`): модель тренируется до `rounds or 300` с `early_stopping=50` на valid=2025, затем финальный прогон с найденным `best_iteration` без эстопа. Чтобы изменить потолок — правьте `DEFAULT_ROUNDS` (`app/models/lgbm_model.py`) и `EARLY_STOPPING` (`app/models/lgbm_train.py`, там же `train_lgbm()`).
 2. **Фиксированное число раундов** — дайте `rounds` из тюнинга (`--tuned`), эстоп при финальном фите не включается.
 3. **Своя команда** — `fit_lgbm(dataset, params={...}, rounds=N)` принимает любые раунды.
 
