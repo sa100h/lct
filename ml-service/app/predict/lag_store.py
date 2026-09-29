@@ -145,6 +145,26 @@ class LagStore:
         self._latest.pop(category, None)
         return self.load(category)
 
+    # ---- data-prep entry point (scripts/build_latest_sidecars) ----
+
+    def rebuild_latest_sidecar(self, category: str) -> Path:
+        """(Re)build the ``features-<cat>-latest.parquet`` sidecar from the
+        current features parquet and drop the in-memory copy.
+
+        This is a DATA-PREP step, deliberately public: serving must not be the
+        thing that creates the file. ``latest_features_for`` falls back to
+        building it on demand, which fails on the read-only data mount inside
+        the container — and a STALE sidecar silently feeds the model an old
+        snapshot (one shipped version predated the feature rebuild and was
+        missing ``f7``/``f30``, so those slots fell back to 0.0).
+        """
+        path = self._latest_sidecar_path(category)
+        if path.exists():
+            path.unlink()
+        self._latest.pop(category, None)
+        self._build_latest_sidecar(category)
+        return path
+
     # ---- auto-feature assembly: the channel's latest full feature row ----
 
     def _latest_sidecar_path(self, category: str) -> Path:
